@@ -1,39 +1,21 @@
-import { createServerClient } from "@supabase/ssr";
 import { createBrowserClient } from "@supabase/ssr";
-import { cookies } from "next/headers";
-import type { Database } from "./database.types";
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
 const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
-const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY!;
+
+// Singleton to avoid multiple GoTrue instances in Client Components.
+// We intentionally use an untyped client here to avoid complex
+// Supabase generic inference issues in client components.
+// Server-side code uses the typed client from supabase-server.ts.
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+let client: ReturnType<typeof createBrowserClient<any>> | null = null;
 
 // ── Browser client (for use in Client Components) ──────────────────────────
-export function createClient() {
-  return createBrowserClient<Database>(supabaseUrl, supabaseAnonKey);
-}
-
-// ── Server client (for Server Components & Route Handlers) ─────────────────
-export async function createServerSideClient() {
-  const cookieStore = await cookies();
-  return createServerClient<Database>(supabaseUrl, supabaseAnonKey, {
-    cookies: {
-      getAll() {
-        return cookieStore.getAll();
-      },
-      setAll(cookiesToSet) {
-        try {
-          cookiesToSet.forEach(({ name, value, options }) =>
-            cookieStore.set(name, value, options)
-          );
-        } catch {}
-      },
-    },
-  });
-}
-
-// ── Service-role client (bypasses RLS — for API routes only) ───────────────
-export function createServiceClient() {
-  return createServerClient<Database>(supabaseUrl, supabaseServiceKey, {
-    cookies: { getAll: () => [], setAll: () => {} },
-  });
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export function createClient(): ReturnType<typeof createBrowserClient<any>> {
+  if (!client) {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    client = createBrowserClient<any>(supabaseUrl, supabaseAnonKey);
+  }
+  return client;
 }
