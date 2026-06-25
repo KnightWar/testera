@@ -3,7 +3,7 @@
 :root {
   --font-inter: "Inter", sans-serif;
 
-  /* Brand palette */
+  /* Default palette (Fallbacks) */
   --accent-primary: #6C63FF;
   --accent-secondary: #A78BFA;
   --accent-glow: rgba(108, 99, 255, 0.35);
@@ -29,6 +29,50 @@
   --text-secondary: #94A3B8;
   --text-muted: #475569;
 }
+
+.admin-theme {
+  --accent-primary: #7C3AED;
+  --accent-secondary: #C084FC;
+  --accent-glow: rgba(124, 58, 237, 0.25);
+  --bg-base: #0B0F19;
+  --bg-card: #131A2E;
+  --bg-card-hover: #1A243F;
+  --bg-input: #172037;
+  --border-subtle: rgba(255, 255, 255, 0.06);
+  --border-strong: rgba(255, 255, 255, 0.12);
+  background-color: var(--bg-base);
+  color: var(--text-primary);
+}
+
+.student-theme {
+  --accent-primary: #059669;
+  --accent-secondary: #34D399;
+  --accent-glow: rgba(5, 150, 105, 0.2);
+  --bg-base: #080D0A;
+  --bg-card: #101813;
+  --bg-card-hover: #16221B;
+  --bg-input: #121E17;
+  --border-subtle: rgba(255, 255, 255, 0.05);
+  --border-strong: rgba(255, 255, 255, 0.1);
+  background-color: var(--bg-base);
+  color: var(--text-primary);
+}
+
+.admin-sidebar {
+  position: fixed !important;
+  left: 0 !important;
+  top: 0 !important;
+  height: 100vh !important;
+  width: 16rem !important; /* 256px */
+  z-index: 40 !important;
+}
+
+.admin-main-content {
+  margin-left: 16rem !important; /* 256px offset */
+  flex: 1 1 0% !important;
+  min-height: 100vh !important;
+}
+
 
 /* ── Reset ───────────────────────────────────────────────────── */
 *, *::before, *::after {
@@ -269,7 +313,7 @@ body {
   transform: translate(-50%, -50%) rotate(-30deg);
   font-size: clamp(1.5rem, 4vw, 3rem);
   font-weight: 700;
-  color: rgba(108, 99, 255, 0.08);
+  color: rgba(255, 255, 255, 0.015);
   white-space: nowrap;
   letter-spacing: 0.15em;
   user-select: none;
@@ -285,7 +329,7 @@ body {
   position: fixed;
   inset: 0;
   z-index: 10000;
-  background: rgba(10, 11, 20, 0.97);
+  background: var(--bg-base);
   display: flex;
   flex-direction: column;
   align-items: center;

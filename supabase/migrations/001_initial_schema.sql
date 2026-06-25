@@ -145,6 +145,7 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
+DROP TRIGGER IF EXISTS exams_updated_at ON exams;
 CREATE TRIGGER exams_updated_at
   BEFORE UPDATE ON exams
   FOR EACH ROW EXECUTE FUNCTION update_updated_at();
@@ -162,25 +163,60 @@ ALTER TABLE violation_logs   ENABLE ROW LEVEL SECURITY;
 ALTER TABLE webcam_snapshots ENABLE ROW LEVEL SECURITY;
 
 -- Admins (authenticated Supabase users) can do everything
+DROP POLICY IF EXISTS "admin_all_exams" ON exams;
 CREATE POLICY "admin_all_exams"         ON exams            FOR ALL USING (auth.role() = 'authenticated');
+
+DROP POLICY IF EXISTS "admin_all_questions" ON questions;
 CREATE POLICY "admin_all_questions"     ON questions        FOR ALL USING (auth.role() = 'authenticated');
+
+DROP POLICY IF EXISTS "admin_all_students" ON students;
 CREATE POLICY "admin_all_students"      ON students         FOR ALL USING (auth.role() = 'authenticated');
+
+DROP POLICY IF EXISTS "admin_all_sessions" ON sessions;
 CREATE POLICY "admin_all_sessions"      ON sessions         FOR ALL USING (auth.role() = 'authenticated');
+
+DROP POLICY IF EXISTS "admin_all_answers" ON answers;
 CREATE POLICY "admin_all_answers"       ON answers          FOR ALL USING (auth.role() = 'authenticated');
+
+DROP POLICY IF EXISTS "admin_all_scores" ON scores;
 CREATE POLICY "admin_all_scores"        ON scores           FOR ALL USING (auth.role() = 'authenticated');
+
+DROP POLICY IF EXISTS "admin_all_violations" ON violation_logs;
 CREATE POLICY "admin_all_violations"    ON violation_logs   FOR ALL USING (auth.role() = 'authenticated');
+
+DROP POLICY IF EXISTS "admin_all_webcam" ON webcam_snapshots;
 CREATE POLICY "admin_all_webcam"        ON webcam_snapshots FOR ALL USING (auth.role() = 'authenticated');
 
--- Students (anon role with matching session) can read their own data and write answers/violations
--- Use service_role key on API routes for student operations (bypasses RLS safely server-side)
+-- Students (anon role) can read exams, questions, and students
+DROP POLICY IF EXISTS "anon_read_exams" ON exams;
+CREATE POLICY "anon_read_exams"         ON exams            FOR SELECT TO anon USING (true);
+
+DROP POLICY IF EXISTS "anon_read_questions" ON questions;
+CREATE POLICY "anon_read_questions"     ON questions        FOR SELECT TO anon USING (true);
+
+DROP POLICY IF EXISTS "anon_read_students" ON students;
+CREATE POLICY "anon_read_students"      ON students         FOR SELECT TO anon USING (true);
+
+-- Students (anon role) can manage their sessions, answers, and logs
+DROP POLICY IF EXISTS "anon_all_sessions" ON sessions;
+CREATE POLICY "anon_all_sessions"       ON sessions         FOR ALL TO anon USING (true);
+
+DROP POLICY IF EXISTS "anon_all_answers" ON answers;
+CREATE POLICY "anon_all_answers"        ON answers          FOR ALL TO anon USING (true);
+
+DROP POLICY IF EXISTS "anon_all_violations" ON violation_logs;
+CREATE POLICY "anon_all_violations"    ON violation_logs   FOR ALL TO anon USING (true);
+
+DROP POLICY IF EXISTS "anon_all_webcam" ON webcam_snapshots;
+CREATE POLICY "anon_all_webcam"        ON webcam_snapshots FOR ALL TO anon USING (true);
 
 -- ─────────────────────────────────────────────
 -- INDEXES for performance
 -- ─────────────────────────────────────────────
-CREATE INDEX idx_questions_exam_id    ON questions(exam_id);
-CREATE INDEX idx_students_exam_id     ON students(exam_id);
-CREATE INDEX idx_sessions_exam_id     ON sessions(exam_id);
-CREATE INDEX idx_answers_session_id   ON answers(session_id);
-CREATE INDEX idx_scores_session_id    ON scores(session_id);
-CREATE INDEX idx_violations_session   ON violation_logs(session_id);
-CREATE INDEX idx_violations_occurred  ON violation_logs(occurred_at DESC);
+CREATE INDEX IF NOT EXISTS idx_questions_exam_id    ON questions(exam_id);
+CREATE INDEX IF NOT EXISTS idx_students_exam_id     ON students(exam_id);
+CREATE INDEX IF NOT EXISTS idx_sessions_exam_id     ON sessions(exam_id);
+CREATE INDEX IF NOT EXISTS idx_answers_session_id   ON answers(session_id);
+CREATE INDEX IF NOT EXISTS idx_scores_session_id    ON scores(session_id);
+CREATE INDEX IF NOT EXISTS idx_violations_session   ON violation_logs(session_id);
+CREATE INDEX IF NOT EXISTS idx_violations_occurred  ON violation_logs(occurred_at DESC);

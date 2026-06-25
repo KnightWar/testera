@@ -122,5 +122,89 @@ export async function GET(req: NextRequest) {
     return xlsxResponse(bytes, `testera_analytics_${examId.slice(0, 8)}.xlsx`);
   }
 
+  if (type === "detailed_results") {
+    // Per-student, per-question detailed breakdown
+    const { data: questionsRaw } = await supabase
+      .from("questions")
+      .select("id, q_no, question, type, max_marks, topic, correct_answer")
+      .eq("exam_id", examId)
+      .order("q_no");
+
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const questions = (questionsRaw ?? []) as any[];
+
+    const { data: sessionsRaw } = await supabase
+      .from("sessions")
+      .select("*, students(roll_no, name)")
+      .eq("exam_id", examId)
+      .order("created_at");
+
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const sessions = (sessionsRaw ?? []) as any[];
+
+    if (sessions.length === 0) {
+      return NextResponse.json({ error: "No sessions found" }, { status: 404 });
+    }
+
+    const sessionIds = sessions.map((s: any) => s.id);
+
+    const { data: answersRaw } = await supabase
+      .from("answers")
+      .select("session_id, question_id, answer_text")
+      .in("session_id", sessionIds);
+
+    const { data: scoresRaw } = await supabase
+      .from("scores")
+      .select("session_id, question_id, marks_awarded, graded_by, ai_feedback")
+      .in("session_id", sessionIds);
+
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const answers = (answersRaw ?? []) as any[];
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const scores = (scoresRaw ?? []) as any[];
+
+    const totalPossible = questions.reduce((s: number, q: any) => s + Number(q.max_marks), 0);
+
+    // Build rows — one row per student
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const rows = sessions.map((sess: any) => {
+      const sessAnswers = answers.filter((a: any) => a.session_id === sess.id);
+      const sessScores = scores.filter((sc: any) => sc.session_id === sess.id);
+      const totalScore = sessScores.reduce((s: number, sc: any) => s + Number(sc.marks_awarded), 0);
+
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const row: Record<string, any> = {
+        "Roll No": sess.students?.roll_no ?? "",
+        "Name": sess.students?.name ?? "",
+        "Total Score": totalScore,
+        "Max Score": totalPossible,
+        "Percentage": totalPossible > 0 ? ((totalScore / totalPossible) * 100).toFixed(1) + "%" : "N/A",
+        "Status": sess.submitted_at ? "Submitted" : sess.is_active ? "In Progress" : "Not Started",
+        "Tab Switches": sess.tab_switches ?? 0,
+        "Fullscreen Exits": sess.fullscreen_exits ?? 0,
+        "DevTools Attempts": sess.devtools_attempts ?? 0,
+        "Submitted At": sess.submitted_at ? new Date(sess.submitted_at).toLocaleString() : "—",
+      };
+
+      // Per-question columns
+      for (const q of questions) {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const ans = sessAnswers.find((a: any) => a.question_id === q.id);
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const sc = sessScores.find((s: any) => s.question_id === q.id);
+        const label = `Q${q.q_no}`;
+        row[`${label} Answer`] = ans?.answer_text ?? "";
+        row[`${label} Score`] = sc ? `${sc.marks_awarded}/${q.max_marks}` : `—/${q.max_marks}`;
+        row[`${label} Graded By`] = sc?.graded_by ?? "—";
+        if (sc?.ai_feedback) row[`${label} AI Feedback`] = sc.ai_feedback;
+      }
+
+      return row;
+    });
+
+    const bytes = exportToExcel(rows, "Detailed Results", "detailed_results.xlsx");
+    return xlsxResponse(bytes, `testera_detailed_results_${examId.slice(0, 8)}.xlsx`);
+  }
+
   return NextResponse.json({ error: "Unknown export type" }, { status: 400 });
 }

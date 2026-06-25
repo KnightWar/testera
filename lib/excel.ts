@@ -1,6 +1,50 @@
 import * as XLSX from "xlsx";
 import type { KeywordRubric } from "./database.types";
 
+function findStudentSheet(workbook: XLSX.WorkBook): XLSX.WorkSheet {
+  const targetNames = ["students", "student", "sheet1"];
+  for (const name of workbook.SheetNames) {
+    if (targetNames.includes(name.toLowerCase().trim())) {
+      return workbook.Sheets[name];
+    }
+  }
+  for (const name of workbook.SheetNames) {
+    const sheet = workbook.Sheets[name];
+    const rows = XLSX.utils.sheet_to_json<any[]>(sheet, { header: 1, range: 0 }).slice(0, 5);
+    for (const row of rows) {
+      if (Array.isArray(row)) {
+        const headers = row.map(h => String(h ?? "").toLowerCase().trim().replace(/[^a-z0-9]/g, ""));
+        if (headers.some(h => ["rollno", "regno", "registrationno", "roll", "reg", "usn"].includes(h))) {
+          return sheet;
+        }
+      }
+    }
+  }
+  return workbook.Sheets[workbook.SheetNames[0]];
+}
+
+function findQuestionSheet(workbook: XLSX.WorkBook): XLSX.WorkSheet {
+  const targetNames = ["questions", "question", "sheet1"];
+  for (const name of workbook.SheetNames) {
+    if (targetNames.includes(name.toLowerCase().trim())) {
+      return workbook.Sheets[name];
+    }
+  }
+  for (const name of workbook.SheetNames) {
+    const sheet = workbook.Sheets[name];
+    const rows = XLSX.utils.sheet_to_json<any[]>(sheet, { header: 1, range: 0 }).slice(0, 5);
+    for (const row of rows) {
+      if (Array.isArray(row)) {
+        const headers = row.map(h => String(h ?? "").toLowerCase().trim().replace(/[^a-z0-9]/g, ""));
+        if (headers.some(h => ["qno", "question", "qnum", "qnumber"].includes(h))) {
+          return sheet;
+        }
+      }
+    }
+  }
+  return workbook.Sheets[workbook.SheetNames[0]];
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // TYPES
 // ─────────────────────────────────────────────────────────────────────────────
@@ -29,7 +73,7 @@ export interface ParseResult {
 // ─────────────────────────────────────────────────────────────────────────────
 export function parseExcelQuestions(buffer: ArrayBuffer): ParseResult {
   const workbook = XLSX.read(buffer, { type: "array" });
-  const sheet = workbook.Sheets[workbook.SheetNames[0]];
+  const sheet = findQuestionSheet(workbook);
   const rows = XLSX.utils.sheet_to_json<Record<string, unknown>>(sheet, {
     defval: "",
     raw: false,
@@ -88,7 +132,7 @@ export function parseExcelQuestions(buffer: ArrayBuffer): ParseResult {
       option_b,
       option_c,
       option_d,
-      correct_answer: correct_answer as "A" | "B" | "C" | "D" | undefined,
+      correct_answer: (correct_answer === "A" || correct_answer === "B" || correct_answer === "C" || correct_answer === "D") ? correct_answer : undefined,
       max_marks,
       topic,
       shuffle_options,
@@ -154,6 +198,19 @@ export function generateQuestionTemplate(): Uint8Array {
   return XLSX.write(wb, { type: "array", bookType: "xlsx" });
 }
 
+export function generateStudentTemplate(): Uint8Array {
+  const wb = XLSX.utils.book_new();
+  const headers = ["Roll_No", "Name"];
+  const sampleRows = [
+    ["REG-101", "John Doe"],
+    ["REG-102", "Jane Smith"]
+  ];
+  const ws = XLSX.utils.aoa_to_sheet([headers, ...sampleRows]);
+  ws["!cols"] = [{ wch: 15 }, { wch: 25 }];
+  XLSX.utils.book_append_sheet(wb, ws, "Students");
+  return XLSX.write(wb, { type: "array", bookType: "xlsx" });
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // STUDENT LIST PARSER
 // ─────────────────────────────────────────────────────────────────────────────
@@ -167,7 +224,7 @@ export function parseStudentList(buffer: ArrayBuffer): {
   errors: string[];
 } {
   const workbook = XLSX.read(buffer, { type: "array" });
-  const sheet = workbook.Sheets[workbook.SheetNames[0]];
+  const sheet = findStudentSheet(workbook);
   const rows = XLSX.utils.sheet_to_json<Record<string, unknown>>(sheet, {
     defval: "",
     raw: false,
@@ -178,8 +235,36 @@ export function parseStudentList(buffer: ArrayBuffer): {
   const seenRolls = new Set<string>();
 
   rows.forEach((row, idx) => {
-    const roll_no = String(row["Roll_No"] ?? row["roll_no"] ?? "").trim();
-    const name = String(row["Name"] ?? row["name"] ?? "").trim();
+    let roll_no = "";
+    let name = "";
+
+    // Normalize keys of the row to find match
+    for (const key of Object.keys(row)) {
+      const k = key.trim().toLowerCase().replace(/[^a-z0-9]/g, "");
+      
+      // Roll No matches: rollno, regno, registrationno, roll, reg, usn, slno, rollnumber, registrationnumber
+      if (["rollno", "regno", "registrationno", "roll", "reg", "usn", "slno", "rollnumber", "registrationnumber"].includes(k)) {
+        roll_no = String(row[key] ?? "").trim();
+      }
+      
+      // Name matches: name, studentname, fullname, names, student, nameofthestudent
+      if (["name", "studentname", "fullname", "names", "student", "nameofthestudent"].includes(k)) {
+        name = String(row[key] ?? "").trim();
+      }
+    }
+
+    // Fallbacks if not found by normalized key
+    if (!roll_no) {
+      roll_no = String(row["Roll_No"] ?? row["roll_no"] ?? row["Roll No"] ?? row["roll no"] ?? row["RollNo"] ?? "").trim();
+    }
+    if (!name) {
+      name = String(row["Name"] ?? row["name"] ?? row["Student Name"] ?? row["student name"] ?? row["Full Name"] ?? "").trim();
+    }
+
+    // Silently skip completely empty rows (common in Excel exports/templates)
+    if (!roll_no && !name) {
+      return;
+    }
 
     if (!roll_no) { errors.push(`Row ${idx + 2}: Roll_No is required`); return; }
     if (!name) { errors.push(`Row ${idx + 2}: Name is required`); return; }

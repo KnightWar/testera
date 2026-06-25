@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useRef } from "react";
+import { useState, useRef, useEffect, use } from "react";
 import { useRouter } from "next/navigation";
 import {
   Upload, Download, AlertCircle, CheckCircle2,
@@ -8,8 +8,10 @@ import {
 } from "lucide-react";
 import { parseExcelQuestions, generateQuestionTemplate, type ParsedQuestion } from "@/lib/excel";
 import { createClient } from "@/lib/supabase";
+import ExamSubNav from "@/components/admin/ExamSubNav";
 
-export default function ExamUploadPage({ params }: { params: { id: string } }) {
+export default function ExamUploadPage({ params }: { params: Promise<{ id: string }> }) {
+  const { id } = use(params);
   const router = useRouter();
   const fileRef = useRef<HTMLInputElement>(null);
   const [stage, setStage] = useState<"idle" | "preview" | "saving" | "done">("idle");
@@ -17,10 +19,21 @@ export default function ExamUploadPage({ params }: { params: { id: string } }) {
   const [errors, setErrors] = useState<{ row: number; field: string; message: string }[]>([]);
   const [expanded, setExpanded] = useState<number | null>(null);
   const [saving, setSaving] = useState(false);
+  const [examTitle, setExamTitle] = useState("");
+
+  const supabase = createClient();
+
+  useEffect(() => {
+    async function load() {
+      const { data } = await supabase.from("exams").select("title").eq("id", id).single();
+      if (data) setExamTitle(data.title);
+    }
+    load();
+  }, [id]);
 
   function handleDownloadTemplate() {
     const bytes = generateQuestionTemplate();
-    const blob = new Blob([bytes.buffer as ArrayBuffer], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" });
+    const blob = new Blob([bytes as any], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
@@ -45,11 +58,11 @@ export default function ExamUploadPage({ params }: { params: { id: string } }) {
     const supabase = createClient();
 
     // Delete existing questions for this exam
-    await supabase.from("questions").delete().eq("exam_id", params.id);
+    await supabase.from("questions").delete().eq("exam_id", id);
 
     // Insert all questions
     const toInsert = questions.map((q) => ({
-      exam_id: params.id,
+      exam_id: id,
       q_no: q.q_no,
       question: q.question,
       type: q.type,
@@ -57,7 +70,7 @@ export default function ExamUploadPage({ params }: { params: { id: string } }) {
       option_b: q.option_b ?? null,
       option_c: q.option_c ?? null,
       option_d: q.option_d ?? null,
-      correct_answer: q.correct_answer ?? null,
+      correct_answer: q.correct_answer || null,
       max_marks: q.max_marks,
       topic: q.topic ?? null,
       shuffle_options: q.shuffle_options,
@@ -69,54 +82,137 @@ export default function ExamUploadPage({ params }: { params: { id: string } }) {
       alert("Upload failed: " + error.message);
     } else {
       setStage("done");
-      setTimeout(() => router.push(`/admin/exams/${params.id}/config`), 1500);
+      setTimeout(() => router.push(`/admin/exams/${id}/config`), 1500);
     }
     setSaving(false);
   }
 
   return (
-    <div className="max-w-5xl fade-in">
-      <h1 className="text-2xl font-bold mb-2">Upload Questions</h1>
-      <p className="mb-8" style={{ color: "var(--text-secondary)" }}>
-        Upload an Excel file following the Testera template. Questions will replace any existing ones for this exam.
-      </p>
+    <div className="max-w-7xl mx-auto space-y-8 fade-in text-[#F1F5F9]">
+      <ExamSubNav examId={id} examTitle={examTitle} />
 
       {stage === "idle" && (
-        <div className="space-y-4">
-          {/* Download template */}
-          <div className="glass-card p-6 flex items-center justify-between">
-            <div>
-              <p className="font-semibold mb-1">Step 1: Download Template</p>
-              <p className="text-sm" style={{ color: "var(--text-secondary)" }}>
-                Pre-formatted .xlsx with instructions and sample rows
-              </p>
+        <div className="space-y-6">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {/* Download template */}
+            <div className="glass-card p-6 flex flex-col justify-between h-full">
+              <div>
+                <h3 className="font-semibold text-lg mb-1">Download Template</h3>
+                <p className="text-sm mb-4" style={{ color: "var(--text-secondary)" }}>
+                  Get the official pre-formatted Excel template with instructions and samples.
+                </p>
+              </div>
+              <button onClick={handleDownloadTemplate} className="btn btn-secondary w-fit">
+                <Download size={16} /> Download Template (.xlsx)
+              </button>
             </div>
-            <button onClick={handleDownloadTemplate} className="btn btn-secondary">
-              <Download size={16} /> Download Template
-            </button>
+
+            {/* Upload zone */}
+            <div
+              className="glass-card border-2 border-dashed p-6 text-center cursor-pointer hover:border-purple-500 transition-colors flex flex-col justify-center items-center h-full"
+              style={{ borderColor: "var(--border-subtle)" }}
+              onClick={() => fileRef.current?.click()}
+              onDragOver={(e) => e.preventDefault()}
+              onDrop={(e) => {
+                e.preventDefault();
+                const file = e.dataTransfer.files[0];
+                if (file) {
+                  const dt = new DataTransfer();
+                  dt.items.add(file);
+                  if (fileRef.current) { fileRef.current.files = dt.files; }
+                  handleFileChange({ target: { files: dt.files } } as any);
+                }
+              }}
+            >
+              <Upload size={32} className="mb-2" style={{ color: "var(--accent-primary)" }} />
+              <p className="font-semibold text-sm mb-1">Drop your Excel file here or click to browse</p>
+              <p className="text-xs" style={{ color: "var(--text-muted)" }}>.xlsx files only · Max 10 MB</p>
+            </div>
           </div>
 
-          {/* Upload zone */}
-          <div
-            className="glass-card border-2 border-dashed p-12 text-center cursor-pointer hover:border-purple-500 transition-colors"
-            style={{ borderColor: "var(--border-subtle)" }}
-            onClick={() => fileRef.current?.click()}
-            onDragOver={(e) => e.preventDefault()}
-            onDrop={(e) => {
-              e.preventDefault();
-              const file = e.dataTransfer.files[0];
-              if (file) {
-                const dt = new DataTransfer();
-                dt.items.add(file);
-                if (fileRef.current) { fileRef.current.files = dt.files; }
-                handleFileChange({ target: { files: dt.files } } as any);
-              }
-            }}
-          >
-            <Upload size={40} className="mx-auto mb-4" style={{ color: "var(--accent-primary)" }} />
-            <p className="font-semibold mb-1">Drop your Excel file here or click to browse</p>
-            <p className="text-sm" style={{ color: "var(--text-muted)" }}>.xlsx files only · Max 10 MB</p>
+          {/* Concrete Template Preview Guide */}
+          <div className="glass-card p-6">
+            <h3 className="text-lg font-bold mb-3 flex items-center gap-2">
+              <Table2 size={20} className="text-purple-400" />
+              Unified Question Template Reference
+            </h3>
+            <p className="text-sm mb-4" style={{ color: "var(--text-secondary)" }}>
+              Testera parses MCQs and Subjective questions from the same sheet. Format your columns exactly as shown below:
+            </p>
+            <div className="overflow-x-auto border rounded-xl" style={{ borderColor: "var(--border-subtle)", background: "rgba(255,255,255,0.01)" }}>
+              <table className="w-full text-xs text-left border-collapse min-w-[900px]">
+                <thead style={{ background: "rgba(255,255,255,0.03)" }}>
+                  <tr className="border-b" style={{ borderColor: "var(--border-subtle)" }}>
+                    <th className="p-3 font-semibold text-slate-400">Q_No</th>
+                    <th className="p-3 font-semibold text-slate-400">Question</th>
+                    <th className="p-3 font-semibold text-slate-400">Type</th>
+                    <th className="p-3 font-semibold text-slate-400">Option_A</th>
+                    <th className="p-3 font-semibold text-slate-400">Option_B</th>
+                    <th className="p-3 font-semibold text-slate-400">Option_C</th>
+                    <th className="p-3 font-semibold text-slate-400">Option_D</th>
+                    <th className="p-3 font-semibold text-slate-400">Correct_Answer</th>
+                    <th className="p-3 font-semibold text-slate-400">Max_Marks</th>
+                    <th className="p-3 font-semibold text-slate-400">Topic</th>
+                    <th className="p-3 font-semibold text-slate-400">Shuffle_Options</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr className="border-b hover:bg-white/[0.01]" style={{ borderColor: "var(--border-subtle)" }}>
+                    <td className="p-3 font-mono font-bold text-purple-400">1</td>
+                    <td className="p-3 font-medium max-w-[200px] truncate">What does CPU stand for?</td>
+                    <td className="p-3"><span className="badge badge-info">MCQ</span></td>
+                    <td className="p-3">Central Processing Unit</td>
+                    <td className="p-3">Core Processing Utility</td>
+                    <td className="p-3">Computer Power Unit</td>
+                    <td className="p-3">Central Power Unit</td>
+                    <td className="p-3 font-mono font-bold text-green-400 text-center">A</td>
+                    <td className="p-3 font-bold text-center">2</td>
+                    <td className="p-3 text-slate-400">Hardware</td>
+                    <td className="p-3 text-slate-400 text-center">YES</td>
+                  </tr>
+                  <tr className="hover:bg-white/[0.01]">
+                    <td className="p-3 font-mono font-bold text-purple-400">2</td>
+                    <td className="p-3 font-medium max-w-[200px] truncate">Explain the concept of the CIA triad in cybersecurity.</td>
+                    <td className="p-3"><span className="badge badge-warning">Subjective</span></td>
+                    <td className="p-3 text-slate-600 italic">— leave empty —</td>
+                    <td className="p-3 text-slate-600 italic">— leave empty —</td>
+                    <td className="p-3 text-slate-600 italic">— leave empty —</td>
+                    <td className="p-3 text-slate-600 italic">— leave empty —</td>
+                    <td className="p-3 text-slate-600 italic text-center">—</td>
+                    <td className="p-3 font-bold text-center">5</td>
+                    <td className="p-3 text-slate-400">Security</td>
+                    <td className="p-3 text-slate-500 text-center">NO</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4 text-xs">
+              <div className="p-4 rounded-xl h-full flex flex-col justify-between" style={{ background: "rgba(108,99,255,0.06)", border: "1px solid rgba(108,99,255,0.15)" }}>
+                <div>
+                  <strong className="block mb-2 text-purple-300" style={{ fontSize: "0.85rem" }}>MCQ Questions (Multiple Choice)</strong>
+                  <ul className="list-disc list-inside space-y-1 text-slate-400">
+                    <li>Must set <code className="text-purple-300">Type</code> to <code className="font-semibold text-purple-200">MCQ</code></li>
+                    <li>Requires at least <code className="text-purple-300">Option_A</code> and <code className="text-purple-300">Option_B</code></li>
+                    <li><code className="text-purple-300">Correct_Answer</code> must be exactly <code className="font-semibold text-green-300">A</code>, <code className="font-semibold text-green-300">B</code>, <code className="font-semibold text-green-300">C</code>, or <code className="font-semibold text-green-300">D</code></li>
+                    <li>Set <code className="text-purple-300">Shuffle_Options</code> to <code className="text-purple-300">YES</code> to randomize option order for each student</li>
+                  </ul>
+                </div>
+              </div>
+              <div className="p-4 rounded-xl h-full flex flex-col justify-between" style={{ background: "rgba(251,191,36,0.06)", border: "1px solid rgba(251,191,36,0.15)" }}>
+                <div>
+                  <strong className="block mb-2 text-amber-300" style={{ fontSize: "0.85rem" }}>Subjective Questions (Prose/Written)</strong>
+                  <ul className="list-disc list-inside space-y-1 text-slate-400">
+                    <li>Must set <code className="text-amber-300">Type</code> to <code className="font-semibold text-amber-200">Subjective</code></li>
+                    <li>Leave Options A–D and Correct_Answer blank (empty cells)</li>
+                    <li>Students will answer with a rich, multiline text box</li>
+                    <li>Graded automatically using AI semantic evaluation or manually by faculty</li>
+                  </ul>
+                </div>
+              </div>
+            </div>
           </div>
+
           <input ref={fileRef} type="file" accept=".xlsx" className="hidden" onChange={handleFileChange} />
         </div>
       )}

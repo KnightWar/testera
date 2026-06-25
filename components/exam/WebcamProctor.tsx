@@ -1,19 +1,18 @@
 "use client";
 
-import { useState, useEffect, useRef } from "react";
-import { Camera, CameraOff, AlertTriangle } from "lucide-react";
+import { useState, useEffect, useRef, useCallback } from "react";
+import { Camera, CameraOff } from "lucide-react";
 import { createClient } from "@/lib/supabase";
 
 interface Props {
   sessionId: string;
   enabled?: boolean;
-  intervalSeconds?: number;
+  intervalSeconds?: number; // unused in randomized mode but kept for backwards compatibility
 }
 
 export default function WebcamProctor({
   sessionId,
   enabled = false,
-  intervalSeconds = 120,
 }: Props) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -21,42 +20,7 @@ export default function WebcamProctor({
   const [status, setStatus] = useState<"idle" | "active" | "denied" | "off">("idle");
   const [snapshotCount, setSnapshotCount] = useState(0);
 
-  useEffect(() => {
-    if (!enabled || !sessionId) {
-      setStatus("off");
-      return;
-    }
-    startWebcam();
-  }, [enabled, sessionId]);
-
-  async function startWebcam() {
-    try {
-      const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: false });
-      if (videoRef.current) {
-        videoRef.current.srcObject = stream;
-        await videoRef.current.play();
-      }
-      setStatus("active");
-
-      // Update session with consent
-      await supabase.from("sessions").update({ webcam_consent: true }).eq("id", sessionId);
-
-      // Start snapshot capture loop
-      const interval = setInterval(() => captureSnapshot(), intervalSeconds * 1000);
-      captureSnapshot(); // first snapshot immediately
-      return () => clearInterval(interval);
-    } catch {
-      setStatus("denied");
-      // Log violation
-      await supabase.from("violation_logs").insert({
-        session_id: sessionId,
-        type: "webcam_missing",
-        metadata: { reason: "user_denied" },
-      });
-    }
-  }
-
-  async function captureSnapshot() {
+  const captureSnapshot = useCallback(async () => {
     if (!videoRef.current || !canvasRef.current) return;
     const video = videoRef.current;
     const canvas = canvasRef.current;
@@ -80,7 +44,59 @@ export default function WebcamProctor({
         setSnapshotCount((n) => n + 1);
       }
     }, "image/jpeg", 0.7);
-  }
+  }, [sessionId, supabase]);
+
+  useEffect(() => {
+    if (!enabled || !sessionId) {
+      setStatus("off");
+      return;
+    }
+
+    let activeStream: MediaStream | null = null;
+    let timeoutId: ReturnType<typeof setTimeout>;
+
+    async function startWebcam() {
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: false });
+        activeStream = stream;
+        if (videoRef.current) {
+          videoRef.current.srcObject = stream;
+          await videoRef.current.play();
+        }
+        setStatus("active");
+
+        // Update session with consent
+        await supabase.from("sessions").update({ webcam_consent: true }).eq("id", sessionId);
+
+        // Start unpredictable capture loop (random interval between 15s and 45s)
+        // to reliably detect phone usage placed on the side
+        function runRandomCapture() {
+          captureSnapshot();
+          const nextDelay = 15000 + Math.random() * 30000;
+          timeoutId = setTimeout(runRandomCapture, nextDelay);
+        }
+
+        runRandomCapture();
+      } catch {
+        setStatus("denied");
+        // Log violation
+        await supabase.from("violation_logs").insert({
+          session_id: sessionId,
+          type: "webcam_missing",
+          metadata: { reason: "user_denied" },
+        });
+      }
+    }
+
+    startWebcam();
+
+    return () => {
+      if (timeoutId) clearTimeout(timeoutId);
+      if (activeStream) {
+        activeStream.getTracks().forEach((track) => track.stop());
+      }
+    };
+  }, [enabled, sessionId, captureSnapshot, supabase]);
 
   if (status === "off" || !enabled) return null;
 
@@ -103,7 +119,7 @@ export default function WebcamProctor({
           </div>
           <video
             ref={videoRef}
-            className="w-full"
+            className="w-full font-sans"
             muted
             playsInline
             autoPlay

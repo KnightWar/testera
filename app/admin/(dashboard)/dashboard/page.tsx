@@ -29,9 +29,9 @@ export default async function AdminDashboard() {
   ];
 
   return (
-    <div className="fade-in">
+    <div className="max-w-7xl mx-auto space-y-8 fade-in">
       {/* Header */}
-      <div className="flex items-center justify-between mb-8">
+      <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold">Dashboard</h1>
           <p style={{ color: "var(--text-secondary)" }}>SoCSE — Exam Management Overview</p>
@@ -42,7 +42,7 @@ export default async function AdminDashboard() {
       </div>
 
       {/* Stats */}
-      <div className="grid grid-cols-3 gap-5 mb-8">
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
         {stats.map(({ label, value, icon: Icon, color }) => (
           <div key={label} className="glass-card p-6">
             <div className="flex items-start justify-between mb-4">
@@ -99,7 +99,7 @@ export default async function AdminDashboard() {
                      new Date() < new Date(exam.start_at) ? "Upcoming" :
                      exam.end_at && new Date() > new Date(exam.end_at) ? "Ended" : "Live"}
                   </span>
-                  <Link href={`/admin/exams/${exam.id}`} className="btn btn-secondary btn-sm">
+                  <Link href={`/admin/exams/${exam.id}/config`} className="btn btn-secondary btn-sm">
                     Manage
                   </Link>
                 </div>

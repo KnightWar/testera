@@ -27,8 +27,8 @@ export default function AdminNav({ userEmail }: { userEmail: string }) {
 
   return (
     <aside
-      className="fixed left-0 top-0 h-screen w-64 flex flex-col border-r z-40"
-      style={{ background: "rgba(255,255,255,0.02)", borderColor: "var(--border-subtle)" }}
+      className="admin-sidebar flex flex-col border-r"
+      style={{ background: "#0B0F19", borderColor: "var(--border-subtle)" }}
     >
       {/* Logo */}
       <div className="p-6 border-b" style={{ borderColor: "var(--border-subtle)" }}>

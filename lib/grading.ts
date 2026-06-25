@@ -178,3 +178,22 @@ export function generateAccessCode(length = 8): string {
   }
   return code;
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// EXAMS DESCRIPTION-BASED ACCESS CODE UTILS
+// ─────────────────────────────────────────────────────────────────────────────
+export function getExamAccessCode(description: string | null | undefined): string | null {
+  if (!description) return null;
+  const match = description.match(/^\[ACCESS_CODE:([A-Z0-9]+)\]/);
+  return match ? match[1] : null;
+}
+
+export function setExamAccessCode(description: string | null | undefined, code: string): string {
+  const cleanDesc = description ? description.replace(/^\[ACCESS_CODE:[A-Z0-9]+\]\s*/, "") : "";
+  return `[ACCESS_CODE:${code}]${cleanDesc ? " " + cleanDesc : ""}`;
+}
+
+export function cleanExamDescription(description: string | null | undefined): string {
+  if (!description) return "";
+  return description.replace(/^\[ACCESS_CODE:[A-Z0-9]+\]\s*/, "");
+}

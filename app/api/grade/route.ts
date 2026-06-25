@@ -113,3 +113,40 @@ export async function PUT(req: NextRequest) {
     return NextResponse.json({ error: err.message }, { status: 500 });
   }
 }
+
+// Admin manual grade override
+export async function PATCH(req: NextRequest) {
+  try {
+    const { session_id, question_id, marks_awarded } = await req.json();
+
+    if (!session_id || !question_id || marks_awarded === undefined) {
+      return NextResponse.json({ error: "session_id, question_id, marks_awarded required" }, { status: 400 });
+    }
+
+    const supabase = createServiceClient();
+
+    // Verify question exists and get max marks for clamping
+    const { data: question } = await supabase
+      .from("questions")
+      .select("max_marks")
+      .eq("id", question_id)
+      .single();
+
+    if (!question) return NextResponse.json({ error: "Question not found" }, { status: 404 });
+
+    const clamped = Math.max(0, Math.min(Number(question.max_marks), Number(marks_awarded)));
+
+    await supabase.from("scores").upsert({
+      session_id,
+      question_id,
+      marks_awarded: clamped,
+      graded_by: "admin",
+      ai_feedback: null, // clear AI feedback when manually overridden
+    }, { onConflict: "session_id,question_id" });
+
+    return NextResponse.json({ marks_awarded: clamped, graded_by: "admin" });
+  } catch (err: any) {
+    return NextResponse.json({ error: err.message }, { status: 500 });
+  }
+}
+
