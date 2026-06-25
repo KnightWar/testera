@@ -64,7 +64,7 @@ export default function StudentLoginPage() {
               <div className="form-group">
                 <label className="form-label">Registration Number</label>
                 <div className="relative">
-                  <Hash size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500" />
+                  {/* <Hash size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500" /> */}
                   <input
                     type="text"
                     className="form-input pl-9 font-mono"
@@ -72,7 +72,7 @@ export default function StudentLoginPage() {
                     value={rollNo}
                     onChange={(e) => setRollNo(e.target.value)}
                     required
-                    autoComplete="off"
+                    autoComplete="on"
                   />
                 </div>
               </div>
@@ -80,11 +80,11 @@ export default function StudentLoginPage() {
               <div className="form-group">
                 <label className="form-label">Exam Access Code</label>
                 <div className="relative">
-                  <KeyRound size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500" />
+                  {/* <KeyRound size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500" /> */}
                   <input
                     type="text"
                     className="form-input pl-9 font-mono uppercase tracking-widest"
-                    placeholder="Enter code given by supervisor"
+                    placeholder="Enter code given by faculty"
                     value={examAccessCode}
                     onChange={(e) => setExamAccessCode(e.target.value)}
                     required
@@ -114,9 +114,16 @@ export default function StudentLoginPage() {
               style={{ background: "rgba(96,165,250,0.08)", border: "1px solid rgba(96,165,250,0.2)", color: "var(--text-secondary)" }}>
               <ShieldCheck size={18} className="shrink-0 mt-0.5" style={{ color: "var(--info)" }} />
               <div>
-                <strong style={{ color: "var(--info)" }}>Before you begin:</strong> Make sure you are on a laptop,
-                have a stable internet connection, and will not be disturbed.
-                Your screen activity will be monitored throughout the exam.
+                <strong style={{ color: "var(--info)" }}>Disclaimer:</strong>
+                <br></br>
+                <strong style={{ color: "#ca8a04ff" }}>
+                  Before you begin: <br></br>
+                  1. Make sure you are on a laptop, <br></br>
+                  2. Have a stable internet connection, and sitting in front of laptop.<br></br>
+                  3. Your screen activity will be monitored throughout the exam.<br></br>
+                  4. Switching between tabs, minimizing the exam tab, doing ALT TAB will penalise by auto-submit and failing.
+                </strong>
+
               </div>
             </div>
           </div>
