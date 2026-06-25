@@ -10,11 +10,7 @@ let _client: any = null;
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 export function createClient(): any {
   if (!_client) {
-    _client = createBrowserClient(supabaseUrl, supabaseAnonKey, {
-      auth: {
-        flowType: "pkce" as const,
-      },
-    });
+    _client = createBrowserClient(supabaseUrl, supabaseAnonKey);
   }
   return _client;
 }
