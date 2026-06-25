@@ -23,10 +23,16 @@ export default function AdminLoginPage() {
 
     if (authError) {
       setError(authError.message);
+      setLoading(false);
     } else {
-      router.push("/admin/dashboard");
+      // Refresh server state so middleware sees the new session cookie,
+      // then navigate. Using window.location for a hard redirect ensures
+      // cookies are fully flushed before the middleware auth check.
+      router.refresh();
+      setTimeout(() => {
+        window.location.href = "/admin/dashboard";
+      }, 200);
     }
-    setLoading(false);
   }
 
   return (

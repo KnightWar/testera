@@ -93,7 +93,7 @@ export default function StudentExamPage({ params }: { params: Promise<{ id: stri
 
       // Order questions per session.question_order
       let ordered = session!.question_order
-        .map((id) => qs.find((q) => q.id === id))
+        .map((id) => qs.find((q: Question) => q.id === id))
         .filter(Boolean) as Question[];
 
       // FALLBACK: if questions were re-uploaded by the admin (causing UUIDs to change),

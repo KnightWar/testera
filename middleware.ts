@@ -39,7 +39,8 @@ export async function middleware(request: NextRequest) {
   });
 
   // Refresh session — do NOT remove this, required for @supabase/ssr
-  let user = null;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  let user: any = null;
   try {
     const { data } = await supabase.auth.getUser();
     user = data.user;
