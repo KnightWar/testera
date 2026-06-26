@@ -200,13 +200,13 @@ export function generateQuestionTemplate(): Uint8Array {
 
 export function generateStudentTemplate(): Uint8Array {
   const wb = XLSX.utils.book_new();
-  const headers = ["Roll_No", "Name"];
+  const headers = ["Roll_No", "Name", "Group"];
   const sampleRows = [
-    ["REG-101", "John Doe"],
-    ["REG-102", "Jane Smith"]
+    ["REG-101", "John Doe", "Section A"],
+    ["REG-102", "Jane Smith", "Section B"]
   ];
   const ws = XLSX.utils.aoa_to_sheet([headers, ...sampleRows]);
-  ws["!cols"] = [{ wch: 15 }, { wch: 25 }];
+  ws["!cols"] = [{ wch: 15 }, { wch: 25 }, { wch: 15 }];
   XLSX.utils.book_append_sheet(wb, ws, "Students");
   return XLSX.write(wb, { type: "array", bookType: "xlsx" });
 }
@@ -217,6 +217,7 @@ export function generateStudentTemplate(): Uint8Array {
 export interface ParsedStudent {
   roll_no: string;
   name: string;
+  group_name: string;
 }
 
 export function parseStudentList(buffer: ArrayBuffer): {
@@ -237,19 +238,25 @@ export function parseStudentList(buffer: ArrayBuffer): {
   rows.forEach((row, idx) => {
     let roll_no = "";
     let name = "";
+    let group_name = "";
 
     // Normalize keys of the row to find match
     for (const key of Object.keys(row)) {
       const k = key.trim().toLowerCase().replace(/[^a-z0-9]/g, "");
       
-      // Roll No matches: rollno, regno, registrationno, roll, reg, usn, slno, rollnumber, registrationnumber
+      // Roll No matches
       if (["rollno", "regno", "registrationno", "roll", "reg", "usn", "slno", "rollnumber", "registrationnumber"].includes(k)) {
         roll_no = String(row[key] ?? "").trim();
       }
       
-      // Name matches: name, studentname, fullname, names, student, nameofthestudent
+      // Name matches
       if (["name", "studentname", "fullname", "names", "student", "nameofthestudent"].includes(k)) {
         name = String(row[key] ?? "").trim();
+      }
+
+      // Group matches
+      if (["group", "groupname", "section", "batch", "class", "division", "studentgroup"].includes(k)) {
+        group_name = String(row[key] ?? "").trim();
       }
     }
 
@@ -260,8 +267,11 @@ export function parseStudentList(buffer: ArrayBuffer): {
     if (!name) {
       name = String(row["Name"] ?? row["name"] ?? row["Student Name"] ?? row["student name"] ?? row["Full Name"] ?? "").trim();
     }
+    if (!group_name) {
+      group_name = String(row["Group"] ?? row["group"] ?? row["Group_Name"] ?? row["group_name"] ?? row["Section"] ?? row["section"] ?? row["Batch"] ?? row["batch"] ?? "").trim();
+    }
 
-    // Silently skip completely empty rows (common in Excel exports/templates)
+    // Silently skip completely empty rows
     if (!roll_no && !name) {
       return;
     }
@@ -270,14 +280,17 @@ export function parseStudentList(buffer: ArrayBuffer): {
     if (!name) { errors.push(`Row ${idx + 2}: Name is required`); return; }
     if (seenRolls.has(roll_no)) { errors.push(`Row ${idx + 2}: Duplicate Roll_No ${roll_no}`); return; }
 
+    if (!group_name) {
+      group_name = "General";
+    }
+
     seenRolls.add(roll_no);
-    students.push({ roll_no, name });
+    students.push({ roll_no, name, group_name });
   });
 
   return { students, errors };
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
 // EXPORT HELPERS
 // ─────────────────────────────────────────────────────────────────────────────
 export function exportToExcel(

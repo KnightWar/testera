@@ -56,11 +56,23 @@ export interface Database {
           exam_id: string;
           roll_no: string;
           name: string;
-          access_code: string;
+          access_code: string | null;
+          group_name: string | null;
           created_at: string;
         };
         Insert: Omit<Database["public"]["Tables"]["students"]["Row"], "id" | "created_at">;
         Update: Partial<Database["public"]["Tables"]["students"]["Insert"]>;
+      };
+      master_students: {
+        Row: {
+          id: string;
+          roll_no: string;
+          name: string;
+          group_name: string;
+          created_at: string;
+        };
+        Insert: Omit<Database["public"]["Tables"]["master_students"]["Row"], "id" | "created_at">;
+        Update: Partial<Database["public"]["Tables"]["master_students"]["Insert"]>;
       };
       sessions: {
         Row: {

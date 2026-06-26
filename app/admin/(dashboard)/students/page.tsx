@@ -4,26 +4,19 @@ import { useEffect, useState, useRef } from "react";
 import { createClient } from "@/lib/supabase";
 import { 
   Users, Search, GraduationCap,
-  FileText, Trash2, Upload, AlertCircle, RefreshCw, X, Download
+  Trash2, Upload, AlertCircle, RefreshCw, X, Download
 } from "lucide-react";
-import Link from "next/link";
 import { parseStudentList, generateStudentTemplate } from "@/lib/excel";
-import { generateAccessCode, getExamAccessCode, setExamAccessCode } from "@/lib/grading";
 
-interface StudentWithExam {
+interface MasterStudent {
   id: string;
   roll_no: string;
   name: string;
-  exam_id: string;
-  exams: {
-    title: string;
-  } | null;
+  group_name: string;
 }
 
 export default function StudentsDirectoryPage() {
-  const [students, setStudents] = useState<StudentWithExam[]>([]);
-  const [exams, setExams] = useState<{ id: string; title: string }[]>([]);
-  const [selectedExamId, setSelectedExamId] = useState("");
+  const [students, setStudents] = useState<MasterStudent[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState("");
 
@@ -42,22 +35,12 @@ export default function StudentsDirectoryPage() {
 
   async function loadData() {
     setLoading(true);
-    const [studentsRes, examsRes] = await Promise.all([
-      supabase
-        .from("students")
-        .select("id, roll_no, name, exam_id, exams(title)")
-        .order("roll_no"),
-      supabase
-        .from("exams")
-        .select("id, title")
-        .order("title")
-    ]);
+    const { data, error } = await supabase
+      .from("master_students")
+      .select("id, roll_no, name, group_name")
+      .order("roll_no");
 
-    if (studentsRes.data) setStudents(studentsRes.data as any[]);
-    if (examsRes.data) {
-      setExams(examsRes.data);
-      if (examsRes.data.length > 0) setSelectedExamId(examsRes.data[0].id);
-    }
+    if (data) setStudents(data as any[]);
     setLoading(false);
   }
 
@@ -70,14 +53,12 @@ export default function StudentsDirectoryPage() {
     return (
       s.roll_no.toLowerCase().includes(q) ||
       s.name.toLowerCase().includes(q) ||
-      (s.exams?.title ?? "").toLowerCase().includes(q)
+      s.group_name.toLowerCase().includes(q)
     );
   });
 
-
-
   async function handleStudentUpload() {
-    if (!studentFile || !selectedExamId) return;
+    if (!studentFile) return;
     setUploading(true);
     setStudentErrors([]);
     try {
@@ -89,35 +70,20 @@ export default function StudentsDirectoryPage() {
         return;
       }
 
-      // Fetch the exam's access code
-      const { data: examData } = await supabase
-        .from("exams")
-        .select("description")
-        .eq("id", selectedExamId)
-        .single();
-
-      let accessCode = getExamAccessCode(examData?.description);
-      if (!accessCode) {
-        accessCode = generateAccessCode();
-        const newDesc = setExamAccessCode(examData?.description, accessCode);
-        await supabase.from("exams").update({ description: newDesc }).eq("id", selectedExamId);
-      }
-
       const toInsert = parsed.map((s) => ({
-        exam_id: selectedExamId,
         roll_no: s.roll_no,
         name: s.name,
-        access_code: accessCode,
+        group_name: s.group_name || "General",
       }));
 
-      const { error } = await supabase.from("students").upsert(toInsert as any, { onConflict: "exam_id,roll_no" });
+      const { error } = await supabase.from("master_students").upsert(toInsert, { onConflict: "roll_no" });
       if (error) {
         setStudentErrors([error.message]);
       } else {
         // reload student list
         const { data } = await supabase
-          .from("students")
-          .select("id, roll_no, name, exam_id, exams(title)")
+          .from("master_students")
+          .select("id, roll_no, name, group_name")
           .order("roll_no");
         if (data) setStudents(data as any[]);
         setStudentFile(null);
@@ -143,7 +109,7 @@ export default function StudentsDirectoryPage() {
 
   async function handleDelete(studentId: string) {
     setDeleting(true);
-    const { error } = await supabase.from("students").delete().eq("id", studentId);
+    const { error } = await supabase.from("master_students").delete().eq("id", studentId);
     if (!error) {
       setStudents((prev) => prev.filter((s) => s.id !== studentId));
     } else {
@@ -162,9 +128,9 @@ export default function StudentsDirectoryPage() {
             <div className="w-10 h-10 rounded-xl flex items-center justify-center" style={{ background: "rgba(124,58,237,0.15)" }}>
               <Users size={22} style={{ color: "var(--accent-primary)" }} />
             </div>
-            Students Directory
+            Master Student Directory
           </h1>
-          <p className="mt-1" style={{ color: "var(--text-secondary)" }}>View, manage, and register examinees</p>
+          <p className="mt-1" style={{ color: "var(--text-secondary)" }}>View, manage, and upload the master examinee roster</p>
         </div>
         <div className="flex gap-2">
           <button 
@@ -196,23 +162,10 @@ export default function StudentsDirectoryPage() {
             </button>
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6 items-end">
-            <div className="form-group mb-0">
-              <label className="form-label">1. Select Target Exam</label>
-              <select 
-                className="form-input bg-[#172037] text-white" 
-                value={selectedExamId}
-                onChange={(e) => setSelectedExamId(e.target.value)}
-              >
-                {exams.map((exam) => (
-                  <option key={exam.id} value={exam.id}>{exam.title}</option>
-                ))}
-              </select>
-            </div>
-
+          <div className="grid grid-cols-1 gap-6 items-end">
             <div className="form-group mb-0">
               <label className="form-label flex justify-between items-center">
-                <span>2. Select Excel File (.xlsx with Roll_No, Name columns)</span>
+                <span>Select Excel File (.xlsx with Roll_No, Name, and optional Group columns)</span>
                 <button
                   type="button"
                   onClick={handleDownloadStudentTemplate}
@@ -248,7 +201,7 @@ export default function StudentsDirectoryPage() {
             <button onClick={() => setShowUploadPanel(false)} className="btn btn-secondary btn-sm">Cancel</button>
             <button 
               onClick={handleStudentUpload} 
-              disabled={!studentFile || !selectedExamId || uploading} 
+              disabled={!studentFile || uploading} 
               className="btn btn-primary btn-sm"
             >
               {uploading ? "Uploading..." : "Start Import"}
@@ -264,7 +217,7 @@ export default function StudentsDirectoryPage() {
           <input
             type="text"
             className="form-input pl-10 bg-[#172037]"
-            placeholder="Search by Roll No, Student Name, or Exam Title..."
+            placeholder="Search by Roll No, Student Name, or Group..."
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
           />
@@ -274,7 +227,7 @@ export default function StudentsDirectoryPage() {
       {/* Main Grid/Table Card */}
       <div className="glass-card overflow-hidden">
         <div className="p-5 border-b font-bold flex items-center justify-between" style={{ borderColor: "var(--border-subtle)", background: "rgba(255,255,255,0.01)" }}>
-          <span className="text-sm font-semibold">Examinees List ({filteredStudents.length})</span>
+          <span className="text-sm font-semibold">Master Students List ({filteredStudents.length})</span>
           {students.length > 0 && searchQuery && (
             <span className="text-xs font-normal text-slate-500">Filtered from {students.length} total</span>
           )}
@@ -284,7 +237,7 @@ export default function StudentsDirectoryPage() {
           <table className="w-full text-sm text-left">
             <thead>
               <tr className="border-b" style={{ borderColor: "var(--border-subtle)", background: "rgba(255,255,255,0.02)" }}>
-                {["Roll No", "Student Name", "Assigned Exam", "Actions"].map((h) => (
+                {["Roll No", "Student Name", "Group", "Actions"].map((h) => (
                   <th key={h} className="px-4 py-3 text-xs font-bold uppercase tracking-wider text-slate-400">{h}</th>
                 ))}
               </tr>
@@ -309,25 +262,14 @@ export default function StudentsDirectoryPage() {
                   <tr key={s.id} className="border-t hover:bg-white/[0.01] transition-colors" style={{ borderColor: "var(--border-subtle)" }}>
                     <td className="px-4 py-3 font-mono text-xs font-semibold text-purple-300">{s.roll_no}</td>
                     <td className="px-4 py-3 font-medium">{s.name}</td>
-                    <td className="px-4 py-3 max-w-xs truncate">
-                      {s.exams ? (
-                        <div className="flex items-center gap-1.5 text-slate-300 font-medium text-xs">
-                          <FileText size={12} className="shrink-0 text-slate-500" />
-                          <Link href={`/admin/exams/${s.exam_id}/config`} className="hover:underline hover:text-purple-300">
-                            {s.exams.title}
-                          </Link>
-                        </div>
-                      ) : (
-                        <span className="text-xs text-slate-500">Exam Deleted</span>
-                      )}
+                    <td className="px-4 py-3">
+                      <span className="badge badge-info" style={{ background: "rgba(108,99,255,0.15)", color: "#A78BFA", border: "1px solid rgba(108,99,255,0.3)" }}>
+                        {s.group_name}
+                      </span>
                     </td>
 
                     <td className="px-4 py-3">
                       <div className="flex items-center gap-2">
-                        <Link href={`/admin/exams/${s.exam_id}/config`} className="btn btn-secondary btn-sm py-1 px-3 text-xs font-semibold">
-                          Config Exam
-                        </Link>
-                        
                         {/* Inline Delete Button (no modal overlay dialog) */}
                         {deletingId === s.id ? (
                           <button

@@ -3,18 +3,17 @@
 import { useState, useEffect, use, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import {
-  Settings, Clock, Users, Shuffle, Eye, Minus, Upload,
-  Download, Save, AlertCircle, CheckCircle2, Trash2,
-  KeyRound, RefreshCw, Copy, Check
+  Settings, Clock, Users, Shuffle, Save, AlertCircle, CheckCircle2, Trash2,
+  KeyRound, RefreshCw, Copy, Check, Download, Upload
 } from "lucide-react";
 import { createClient } from "@/lib/supabase";
 import { parseStudentList, generateStudentTemplate } from "@/lib/excel";
-import { generateAccessCode, getExamAccessCode, setExamAccessCode } from "@/lib/grading";
 import type { Database } from "@/lib/database.types";
 import ExamSubNav from "@/components/admin/ExamSubNav";
 
 type Exam = Database["public"]["Tables"]["exams"]["Row"] & { access_code?: string | null };
 type Student = Database["public"]["Tables"]["students"]["Row"];
+type MasterStudent = Database["public"]["Tables"]["master_students"]["Row"];
 
 export default function ExamConfigPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
@@ -22,6 +21,10 @@ export default function ExamConfigPage({ params }: { params: Promise<{ id: strin
   const supabase = createClient();
   const [exam, setExam] = useState<Partial<Exam>>({});
   const [students, setStudents] = useState<Student[]>([]);
+  const [masterStudents, setMasterStudents] = useState<MasterStudent[]>([]);
+  const [groups, setGroups] = useState<string[]>([]);
+  const [selectedGroup, setSelectedGroup] = useState("");
+  const [selectedStudentId, setSelectedStudentId] = useState("");
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [studentFile, setStudentFile] = useState<File | null>(null);
@@ -29,33 +32,42 @@ export default function ExamConfigPage({ params }: { params: Promise<{ id: strin
   const [saveMsg, setSaveMsg] = useState("");
   const [codeCopied, setCodeCopied] = useState(false);
 
-  useEffect(() => {
-    async function load() {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const examRes = await (supabase.from("exams") as any).select("*").eq("id", id).single();
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const studentsRes = await (supabase.from("students") as any).select("*").eq("exam_id", id).order("roll_no");
+  async function loadData() {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const examRes = await (supabase.from("exams") as any).select("*").eq("id", id).single();
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const studentsRes = await (supabase.from("students") as any).select("*").eq("exam_id", id).order("roll_no");
+    const masterRes = await supabase.from("master_students").select("*").order("name");
 
-      if (examRes.data) {
-        const examData = examRes.data as Exam;
-        // Extract access code from description
-        let code = getExamAccessCode(examData.description);
-        if (!code) {
-          code = generateAccessCode();
-          const newDesc = setExamAccessCode(examData.description, code);
-          await supabase.from("exams").update({ description: newDesc }).eq("id", id);
-          examData.description = newDesc;
-          
-          // Also update all existing students' access codes
-          await supabase.from("students").update({ access_code: code }).eq("exam_id", id);
-        }
-        examData.access_code = code;
-        setExam(examData);
+    if (examRes.data) {
+      const examData = examRes.data as Exam;
+      let code = getExamAccessCode(examData.description);
+      if (!code) {
+        code = generateAccessCode();
+        const newDesc = setExamAccessCode(examData.description, code);
+        await supabase.from("exams").update({ description: newDesc }).eq("id", id);
+        examData.description = newDesc;
+        
+        await supabase.from("students").update({ access_code: code }).eq("exam_id", id);
       }
-      setStudents((studentsRes.data ?? []) as Student[]);
-      setLoading(false);
+      examData.access_code = code;
+      setExam(examData);
     }
-    load();
+    setStudents((studentsRes.data ?? []) as Student[]);
+    
+    if (masterRes.data) {
+      setMasterStudents(masterRes.data);
+      const uniqueGroups = Array.from(new Set(masterRes.data.map(s => s.group_name))).filter(Boolean).sort() as string[];
+      setGroups(uniqueGroups);
+      if (uniqueGroups.length > 0) {
+        setSelectedGroup(uniqueGroups[0]);
+      }
+    }
+    setLoading(false);
+  }
+
+  useEffect(() => {
+    loadData();
   }, [id]);
 
   // Auto-calculate end_at when start_at or duration_mins changes
@@ -94,8 +106,6 @@ export default function ExamConfigPage({ params }: { params: Promise<{ id: strin
     const code = generateAccessCode();
     const newDesc = setExamAccessCode(exam.description, code);
     await supabase.from("exams").update({ description: newDesc }).eq("id", id);
-    
-    // Also update all existing students' access codes
     await supabase.from("students").update({ access_code: code }).eq("exam_id", id);
     
     setExam((p) => ({ ...p, description: newDesc, access_code: code }));
@@ -130,28 +140,132 @@ export default function ExamConfigPage({ params }: { params: Promise<{ id: strin
     setTimeout(() => setSaveMsg(""), 2500);
   }
 
-  async function handleStudentUpload() {
-    if (!studentFile) return;
-    const buffer = await studentFile.arrayBuffer();
-    const { students: parsed, errors } = parseStudentList(buffer);
-    setStudentErrors(errors);
-    if (errors.length > 0) return;
+  async function handleAssignGroup() {
+    if (!selectedGroup) return;
+    setSaving(true);
 
-    // Students share the exam access code — no per-student code needed
-    const toInsert = parsed.map((s) => ({
+    const { data: groupStudents, error: fetchErr } = await supabase
+      .from("master_students")
+      .select("roll_no, name, group_name")
+      .eq("group_name", selectedGroup);
+
+    if (fetchErr || !groupStudents) {
+      alert("Failed to fetch group students: " + fetchErr?.message);
+      setSaving(false);
+      return;
+    }
+
+    const toInsert = groupStudents.map((s) => ({
       exam_id: id,
       roll_no: s.roll_no,
       name: s.name,
+      group_name: s.group_name,
       access_code: exam.access_code || generateAccessCode(),
     }));
 
-    const { error } = await supabase.from("students").upsert(toInsert as any, { onConflict: "exam_id,roll_no" });
-    if (!error) {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const { data } = await (supabase.from("students") as any).select("*").eq("exam_id", id).order("roll_no");
+    const { error: insertErr } = await supabase
+      .from("students")
+      .upsert(toInsert as any, { onConflict: "exam_id,roll_no" });
+
+    if (insertErr) {
+      alert("Failed to assign group: " + insertErr.message);
+    } else {
+      const { data } = await supabase.from("students").select("*").eq("exam_id", id).order("roll_no");
       setStudents(data ?? []);
-      setStudentFile(null);
+      setSaveMsg(`Assigned group "${selectedGroup}" successfully!`);
+      setTimeout(() => setSaveMsg(""), 2500);
     }
+    setSaving(false);
+  }
+
+  async function handleAssignStudent() {
+    if (!selectedStudentId) return;
+    setSaving(true);
+
+    const studentToAssign = masterStudents.find(s => s.id === selectedStudentId);
+    if (!studentToAssign) {
+      setSaving(false);
+      return;
+    }
+
+    const { error } = await supabase.from("students").upsert({
+      exam_id: id,
+      roll_no: studentToAssign.roll_no,
+      name: studentToAssign.name,
+      group_name: studentToAssign.group_name,
+      access_code: exam.access_code || generateAccessCode(),
+    }, { onConflict: "exam_id,roll_no" });
+
+    if (error) {
+      alert("Failed to assign student: " + error.message);
+    } else {
+      const { data } = await supabase.from("students").select("*").eq("exam_id", id).order("roll_no");
+      setStudents(data ?? []);
+      setSelectedStudentId("");
+      setSaveMsg(`Assigned ${studentToAssign.name} successfully!`);
+      setTimeout(() => setSaveMsg(""), 2500);
+    }
+    setSaving(false);
+  }
+
+  async function handleRemoveStudent(studentId: string) {
+    const { error } = await supabase.from("students").delete().eq("id", studentId);
+    if (error) {
+      alert("Failed to unassign student: " + error.message);
+    } else {
+      setStudents((prev) => prev.filter((s) => s.id !== studentId));
+    }
+  }
+
+  async function handleStudentUpload() {
+    if (!studentFile) return;
+    setSaving(true);
+    setStudentErrors([]);
+    try {
+      const buffer = await studentFile.arrayBuffer();
+      const { students: parsed, errors } = parseStudentList(buffer);
+      setStudentErrors(errors);
+      if (errors.length > 0) {
+        setSaving(false);
+        return;
+      }
+
+      const masterInsert = parsed.map((s) => ({
+        roll_no: s.roll_no,
+        name: s.name,
+        group_name: s.group_name || "General",
+      }));
+
+      // 1. Save to master student roster
+      const { error: masterErr } = await supabase.from("master_students").upsert(masterInsert, { onConflict: "roll_no" });
+      if (masterErr) {
+        alert("Failed to update master student roster: " + masterErr.message);
+        setSaving(false);
+        return;
+      }
+
+      // 2. Assign to current exam
+      const toInsert = parsed.map((s) => ({
+        exam_id: id,
+        roll_no: s.roll_no,
+        name: s.name,
+        group_name: s.group_name || "General",
+        access_code: exam.access_code || generateAccessCode(),
+      }));
+
+      const { error: assignErr } = await supabase.from("students").upsert(toInsert as any, { onConflict: "exam_id,roll_no" });
+      if (assignErr) {
+        alert("Failed to assign students to exam: " + assignErr.message);
+      } else {
+        await loadData();
+        setStudentFile(null);
+        setSaveMsg("Imported and assigned students successfully!");
+        setTimeout(() => setSaveMsg(""), 2500);
+      }
+    } catch (err: any) {
+      setStudentErrors([err.message]);
+    }
+    setSaving(false);
   }
 
   function handleDownloadStudentTemplate() {
@@ -165,10 +279,14 @@ export default function ExamConfigPage({ params }: { params: Promise<{ id: strin
     URL.revokeObjectURL(url);
   }
 
-  if (loading) return <div className="flex items-center gap-2 pt-12"><span className="spinner" /> Loading…</div>;
+  if (loading) return <div className="flex items-center gap-2 pt-12 text-slate-300"><span className="spinner" /> Loading…</div>;
 
   const startAtLocal = exam.start_at ? new Date(exam.start_at).toLocaleString("sv-SE", { timeZone: "Asia/Kolkata" }).slice(0, 16) : "";
   const endAtLocal = exam.end_at ? new Date(exam.end_at).toLocaleString("sv-SE", { timeZone: "Asia/Kolkata" }).slice(0, 16) : "";
+
+  const unassignedStudents = masterStudents.filter(
+    (ms) => !students.some((s) => s.roll_no === ms.roll_no)
+  );
 
   return (
     <div className="max-w-7xl mx-auto space-y-8 fade-in text-[#F1F5F9]">
@@ -313,43 +431,95 @@ export default function ExamConfigPage({ params }: { params: Promise<{ id: strin
 
         {/* Right Column: Students */}
         <div className="lg:col-span-1">
-          <div className="glass-card p-6">
-            <h2 className="font-bold mb-4 flex items-center gap-2"><Users size={17} style={{ color: "var(--accent-primary)" }} />Students ({students.length})</h2>
+          <div className="glass-card p-6 space-y-6">
+            <h2 className="font-bold flex items-center gap-2 border-b pb-3" style={{ borderColor: "var(--border-subtle)" }}>
+              <Users size={17} style={{ color: "var(--accent-primary)" }} />
+              Assigned Students ({students.length})
+            </h2>
 
-            <div className="space-y-4 mb-5">
-              <div className="form-group mb-0">
-                <div className="flex items-center justify-between mb-1">
-                  <label className="form-label mb-0">Upload Student List</label>
-                  <button
-                    onClick={handleDownloadStudentTemplate}
-                    className="text-[10px] text-purple-400 hover:text-purple-300 font-semibold flex items-center gap-1 hover:underline border-none bg-transparent cursor-pointer"
-                  >
-                    <Download size={10} /> Template (.xlsx)
-                  </button>
-                </div>
-                <input type="file" accept=".xlsx,.csv" className="form-input text-xs bg-[#172037]"
-                  onChange={(e) => setStudentFile(e.target.files?.[0] ?? null)} />
-              </div>
+            {/* 1. Bulk Group Assignment */}
+            <div className="space-y-2 p-4 rounded-xl" style={{ background: "rgba(108,99,255,0.04)", border: "1px solid rgba(108,99,255,0.1)" }}>
+              <h3 className="text-xs font-bold text-purple-300 uppercase tracking-wider">Bulk Group Assign</h3>
               <div className="flex gap-2">
-                <button onClick={handleStudentUpload} disabled={!studentFile} className="btn btn-secondary btn-sm flex-1">
-                  <Upload size={14} /> Import
+                <select
+                  className="form-input text-xs bg-[#172037] flex-1"
+                  value={selectedGroup}
+                  onChange={(e) => setSelectedGroup(e.target.value)}
+                >
+                  {groups.length === 0 ? (
+                    <option value="">No groups found in directory</option>
+                  ) : (
+                    groups.map((g) => <option key={g} value={g}>{g}</option>)
+                  )}
+                </select>
+                <button
+                  onClick={handleAssignGroup}
+                  disabled={!selectedGroup || saving}
+                  className="btn btn-primary btn-sm whitespace-nowrap text-xs py-1.5 px-3"
+                >
+                  Assign Group
                 </button>
               </div>
             </div>
 
+            {/* 2. Individual Student Assignment */}
+            <div className="space-y-2 p-4 rounded-xl" style={{ background: "rgba(52,211,153,0.04)", border: "1px solid rgba(52,211,153,0.1)" }}>
+              <h3 className="text-xs font-bold text-emerald-400 uppercase tracking-wider">Assign Individual</h3>
+              <div className="flex gap-2">
+                <select
+                  className="form-input text-xs bg-[#172037] flex-1"
+                  value={selectedStudentId}
+                  onChange={(e) => setSelectedStudentId(e.target.value)}
+                >
+                  <option value="">Select student...</option>
+                  {unassignedStudents.map((s) => (
+                    <option key={s.id} value={s.id}>
+                      {s.name} ({s.roll_no} - {s.group_name})
+                    </option>
+                  ))}
+                </select>
+                <button
+                  onClick={handleAssignStudent}
+                  disabled={!selectedStudentId || saving}
+                  className="btn btn-secondary btn-sm whitespace-nowrap text-xs py-1.5 px-3"
+                >
+                  Assign
+                </button>
+              </div>
+            </div>
+
+            {/* 3. Spreadsheet Upload Fallback */}
+            <div className="space-y-2 p-4 rounded-xl" style={{ background: "var(--bg-input)", border: "1px solid var(--border-subtle)" }}>
+              <div className="flex items-center justify-between">
+                <h3 className="text-xs font-bold text-slate-400 uppercase tracking-wider">Excel Roster Upload</h3>
+                <button
+                  onClick={handleDownloadStudentTemplate}
+                  className="text-[9px] text-purple-400 hover:text-purple-300 font-bold flex items-center gap-0.5 border-none bg-transparent cursor-pointer"
+                >
+                  <Download size={9} /> Template
+                </button>
+              </div>
+              <input type="file" accept=".xlsx,.csv" className="form-input text-[11px] bg-[#172037] p-1"
+                onChange={(e) => setStudentFile(e.target.files?.[0] ?? null)} />
+              <button onClick={handleStudentUpload} disabled={!studentFile || saving} className="btn btn-secondary btn-xs w-full py-1 mt-1 font-semibold text-[11px]">
+                <Upload size={10} className="inline mr-1" /> Parse & Assign
+              </button>
+            </div>
+
             {studentErrors.length > 0 && (
-              <div className="mb-4 p-3 rounded-xl text-xs" style={{ background: "rgba(248,113,113,0.1)", color: "var(--danger)", border: "1px solid rgba(248,113,113,0.3)" }}>
+              <div className="p-3 rounded-xl text-xs" style={{ background: "rgba(248,113,113,0.1)", color: "var(--danger)", border: "1px solid rgba(248,113,113,0.3)" }}>
                 <AlertCircle size={12} className="inline mr-1 shrink-0" />
                 {studentErrors.join(" · ")}
               </div>
             )}
 
+            {/* List of Assigned Students */}
             {students.length > 0 && (
               <div className="overflow-hidden rounded-xl border max-h-[350px] overflow-y-auto" style={{ borderColor: "var(--border-subtle)" }}>
                 <table className="w-full text-xs">
                   <thead style={{ background: "rgba(255,255,255,0.03)" }} className="sticky top-0 z-10">
                     <tr className="border-b" style={{ borderColor: "var(--border-subtle)", background: "#11121C" }}>
-                      {["Roll No", "Name"].map((h) => (
+                      {["Roll No", "Name", "Group", "Action"].map((h) => (
                         <th key={h} className="text-left px-3 py-2 font-semibold uppercase tracking-wider text-[10px]"
                           style={{ color: "var(--text-muted)" }}>{h}</th>
                       ))}
@@ -359,7 +529,17 @@ export default function ExamConfigPage({ params }: { params: Promise<{ id: strin
                     {students.map((s) => (
                       <tr key={s.id} className="border-t" style={{ borderColor: "var(--border-subtle)" }}>
                         <td className="px-3 py-2 font-mono text-[11px] truncate max-w-[80px]">{s.roll_no}</td>
-                        <td className="px-3 py-2 font-medium truncate max-w-[120px]">{s.name}</td>
+                        <td className="px-3 py-2 font-medium truncate max-w-[90px]">{s.name}</td>
+                        <td className="px-3 py-2 text-[10px] text-slate-400 truncate max-w-[70px]">{s.group_name || "General"}</td>
+                        <td className="px-3 py-1">
+                          <button
+                            onClick={() => handleRemoveStudent(s.id)}
+                            className="text-red-400 hover:text-red-300 p-1 bg-transparent border-none cursor-pointer"
+                            title="Remove student from this exam"
+                          >
+                            <Trash2 size={12} />
+                          </button>
+                        </td>
                       </tr>
                     ))}
                   </tbody>
@@ -371,4 +551,27 @@ export default function ExamConfigPage({ params }: { params: Promise<{ id: strin
       </div>
     </div>
   );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// EXAMS DESCRIPTION-BASED ACCESS CODE UTILS (Fallbacks preserved)
+// ─────────────────────────────────────────────────────────────────────────────
+function generateAccessCode(length = 8): string {
+  const chars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
+  let code = "";
+  for (let i = 0; i < length; i++) {
+    code += chars[Math.floor(Math.random() * chars.length)];
+  }
+  return code;
+}
+
+function getExamAccessCode(description: string | null | undefined): string | null {
+  if (!description) return null;
+  const match = description.match(/^\[ACCESS_CODE:([A-Z0-9]+)\]/);
+  return match ? match[1] : null;
+}
+
+function setExamAccessCode(description: string | null | undefined, code: string): string {
+  const cleanDesc = description ? description.replace(/^\[ACCESS_CODE:[A-Z0-9]+\]\s*/, "") : "";
+  return `[ACCESS_CODE:${code}]${cleanDesc ? " " + cleanDesc : ""}`;
 }
