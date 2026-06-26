@@ -18,20 +18,25 @@ export default function AdminLoginPage() {
     setError("");
     setLoading(true);
 
-    const supabase = createClient();
-    const { error: authError } = await supabase.auth.signInWithPassword({ email, password });
+    try {
+      const supabase = createClient();
+      const { error: authError } = await supabase.auth.signInWithPassword({ email, password });
 
-    if (authError) {
-      setError(authError.message);
+      if (authError) {
+        setError(authError.message);
+        setLoading(false);
+      } else {
+        // Refresh server state so middleware sees the new session cookie,
+        // then navigate. Using window.location for a hard redirect ensures
+        // cookies are fully flushed before the middleware auth check.
+        router.refresh();
+        setTimeout(() => {
+          window.location.href = "/admin/dashboard";
+        }, 200);
+      }
+    } catch (err: any) {
+      setError(err.message || "An unexpected error occurred during login.");
       setLoading(false);
-    } else {
-      // Refresh server state so middleware sees the new session cookie,
-      // then navigate. Using window.location for a hard redirect ensures
-      // cookies are fully flushed before the middleware auth check.
-      router.refresh();
-      setTimeout(() => {
-        window.location.href = "/admin/dashboard";
-      }, 200);
     }
   }
 

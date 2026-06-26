@@ -12,7 +12,9 @@ export async function middleware(request: NextRequest) {
 
   // If env vars are missing, allow the request through (Vercel will surface the real error)
   if (!supabaseUrl || !supabaseAnonKey) {
-    console.error("[middleware] Missing Supabase env vars — skipping auth check");
+    console.error(
+      `[middleware] Missing Supabase env vars — Url present: ${!!supabaseUrl}, Anon key present: ${!!supabaseAnonKey}`
+    );
     if (pathname.startsWith("/admin") && pathname !== "/admin/login") {
       return NextResponse.redirect(new URL("/admin/login", request.url));
     }
@@ -24,9 +26,12 @@ export async function middleware(request: NextRequest) {
   const supabase = createServerClient(supabaseUrl, supabaseAnonKey, {
     cookies: {
       getAll() {
-        return request.cookies.getAll();
+        const allCookies = request.cookies.getAll();
+        console.log(`[middleware] Cookies count: ${allCookies.length}`);
+        return allCookies;
       },
       setAll(cookiesToSet) {
+        console.log(`[middleware] Setting cookies:`, cookiesToSet.map(c => c.name));
         cookiesToSet.forEach(({ name, value }) =>
           request.cookies.set(name, value)
         );
@@ -42,14 +47,19 @@ export async function middleware(request: NextRequest) {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   let user: any = null;
   try {
-    const { data } = await supabase.auth.getUser();
-    user = data.user;
+    const { data, error } = await supabase.auth.getUser();
+    if (error) {
+      console.warn("[middleware] getUser auth error:", error.message, error.status);
+    }
+    user = data?.user;
+    console.log(`[middleware] getUser result — User ID: ${user?.id || "none"}, Email: ${user?.email || "none"}`);
   } catch (err) {
-    console.error("[middleware] getUser error:", err);
+    console.error("[middleware] getUser exception:", err);
   }
 
   // Admin routes require an authenticated Supabase user
   if (pathname.startsWith("/admin") && pathname !== "/admin/login" && !user) {
+    console.warn(`[middleware] Unauthorized access to ${pathname} — redirecting to login`);
     return NextResponse.redirect(new URL("/admin/login", request.url));
   }
 
