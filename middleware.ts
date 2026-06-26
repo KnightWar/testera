@@ -63,6 +63,12 @@ export async function middleware(request: NextRequest) {
     return NextResponse.redirect(new URL("/admin/login", request.url));
   }
 
+  // Redirect authenticated admin users away from the login page to the dashboard
+  if (pathname === "/admin/login" && user) {
+    console.log("[middleware] Authenticated user on login page — redirecting to dashboard");
+    return NextResponse.redirect(new URL("/admin/dashboard", request.url));
+  }
+
   return supabaseResponse;
 }
 
