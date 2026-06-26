@@ -20,16 +20,45 @@ export default function ExamUploadPage({ params }: { params: Promise<{ id: strin
   const [expanded, setExpanded] = useState<number | null>(null);
   const [saving, setSaving] = useState(false);
   const [examTitle, setExamTitle] = useState("");
+  const [existingCount, setExistingCount] = useState<number>(0);
+  const [loadingExisting, setLoadingExisting] = useState<boolean>(true);
 
   const supabase = createClient();
 
   useEffect(() => {
     async function load() {
+      // 1. Get exam title
       const { data } = await supabase.from("exams").select("title").eq("id", id).single();
       if (data) setExamTitle(data.title);
+
+      // 2. Get existing count
+      const { count, error } = await supabase
+        .from("questions")
+        .select("*", { count: "exact", head: true })
+        .eq("exam_id", id);
+      
+      if (!error && count !== null) {
+        setExistingCount(count);
+      }
+      setLoadingExisting(false);
     }
     load();
   }, [id]);
+
+  async function handleDeleteAllQuestions() {
+    if (!confirm("Are you sure you want to delete all questions for this exam? This action cannot be undone.")) {
+      return;
+    }
+    setSaving(true);
+    const { error } = await supabase.from("questions").delete().eq("exam_id", id);
+    if (error) {
+      alert("Delete failed: " + error.message);
+    } else {
+      setExistingCount(0);
+      alert("All questions deleted successfully.");
+    }
+    setSaving(false);
+  }
 
   function handleDownloadTemplate() {
     const bytes = generateQuestionTemplate();
@@ -81,6 +110,7 @@ export default function ExamUploadPage({ params }: { params: Promise<{ id: strin
     if (error) {
       alert("Upload failed: " + error.message);
     } else {
+      setExistingCount(questions.length);
       setStage("done");
       setTimeout(() => router.push(`/admin/exams/${id}/config`), 1500);
     }
@@ -93,6 +123,48 @@ export default function ExamUploadPage({ params }: { params: Promise<{ id: strin
 
       {stage === "idle" && (
         <div className="space-y-6">
+          {loadingExisting ? (
+            <div className="glass-card p-6 text-sm flex items-center gap-2 text-slate-400">
+              <span className="spinner" /> Loading current questions state…
+            </div>
+          ) : existingCount > 0 ? (
+            <div className="glass-card p-6 border-l-4 border-l-purple-500 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-xl flex items-center justify-center bg-purple-500/10">
+                  <CheckCircle2 className="text-purple-400" size={20} />
+                </div>
+                <div>
+                  <h3 className="font-semibold text-lg">Questions Already Uploaded</h3>
+                  <p className="text-sm" style={{ color: "var(--text-secondary)" }}>
+                    This exam currently has <strong className="text-purple-400">{existingCount}</strong> questions configured.
+                  </p>
+                  <p className="text-xs mt-1" style={{ color: "var(--text-muted)" }}>
+                    To replace or re-upload questions, upload a new Excel file below. It will overwrite the current list.
+                  </p>
+                </div>
+              </div>
+              <button
+                onClick={handleDeleteAllQuestions}
+                disabled={saving}
+                className="btn btn-danger btn-sm whitespace-nowrap shrink-0 flex items-center gap-1.5"
+              >
+                <Trash2 size={14} /> Delete Questions
+              </button>
+            </div>
+          ) : (
+            <div className="glass-card p-6 border-l-4 border-l-amber-500 flex items-center gap-3">
+              <div className="w-10 h-10 rounded-xl flex items-center justify-center bg-amber-500/10">
+                <AlertCircle className="text-amber-400" size={20} />
+              </div>
+              <div>
+                <h3 className="font-semibold text-lg">No Questions Uploaded</h3>
+                <p className="text-sm" style={{ color: "var(--text-secondary)" }}>
+                  This exam does not have any questions yet. Download the template, format your questions, and drop them below.
+                </p>
+              </div>
+            </div>
+          )}
+
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             {/* Download template */}
             <div className="glass-card p-6 flex flex-col justify-between h-full">

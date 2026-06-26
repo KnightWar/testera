@@ -59,11 +59,11 @@ export default function AdminLoginPage() {
         </div>
 
         {/* Card */}
-        <div className="glass-card p-8">
+        <div className="card card--elevated p-8">
           <div className="flex items-center gap-2 mb-6 p-3 rounded-lg"
-            style={{ background: "rgba(108,99,255,0.1)", border: "1px solid rgba(108,99,255,0.25)" }}>
-            <Shield size={16} className="text-purple-400 shrink-0" />
-            <span className="text-sm text-purple-300">Admin access only. Students use the separate portal.</span>
+            style={{ background: "var(--color-accent-subtle)", border: "1px solid var(--color-accent-glow)" }}>
+            <Shield size={16} style={{ color: "var(--color-accent-light)" }} className="shrink-0" />
+            <span className="text-sm" style={{ color: "var(--color-accent-light)" }}>Admin access only. Students use the separate portal.</span>
           </div>
 
           <form onSubmit={handleSubmit}>
@@ -105,12 +105,12 @@ export default function AdminLoginPage() {
             </div>
 
             {error && (
-              <div className="mb-4 p-3 rounded-lg text-sm" style={{ background: "rgba(248,113,113,0.1)", color: "var(--danger)", border: "1px solid rgba(248,113,113,0.3)" }}>
+              <div className="mb-4 p-3 rounded-lg text-sm" style={{ background: "rgba(248,113,113,0.1)", color: "var(--color-danger)", border: "1px solid rgba(248,113,113,0.3)" }}>
                 {error}
               </div>
             )}
 
-            <button type="submit" className="btn btn-primary w-full btn-lg" disabled={loading}>
+            <button type="submit" className="btn btn--primary w-full" disabled={loading} style={{ padding: "10px", fontSize: "14px" }}>
               {loading ? <><span className="spinner" />Signing in…</> : "Sign In"}
             </button>
           </form>

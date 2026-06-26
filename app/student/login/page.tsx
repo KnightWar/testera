@@ -59,7 +59,7 @@ export default function StudentLoginPage() {
             <p style={{ color: "var(--text-secondary)" }}>Department of SoCSE — Testera</p>
           </div>
 
-          <div className="glass-card p-8">
+          <div className="card card--elevated p-8">
             <form onSubmit={handleLogin}>
               <div className="form-group">
                 <label className="form-label">Registration Number</label>
@@ -92,20 +92,20 @@ export default function StudentLoginPage() {
                     maxLength={8}
                   />
                 </div>
-                <p className="text-xs mt-1" style={{ color: "var(--text-muted)" }}>
+                <p className="text-xs mt-1" style={{ color: "var(--color-text-muted)" }}>
                   All students in your batch share the same 8-character code for this exam.
                 </p>
               </div>
 
               {error && (
                 <div className="mb-4 p-3 rounded-lg text-sm"
-                  style={{ background: "rgba(248,113,113,0.1)", color: "var(--danger)", border: "1px solid rgba(248,113,113,0.3)" }}>
+                  style={{ background: "rgba(248,113,113,0.1)", color: "var(--color-danger)", border: "1px solid rgba(248,113,113,0.3)" }}>
                   {error}
                 </div>
               )}
 
-              <button type="submit" className="btn w-full btn-lg" disabled={loading}
-                style={{ background: "linear-gradient(135deg, #059669, #34D399)", color: "white", boxShadow: "0 4px 20px rgba(52,211,153,0.3)" }}>
+              <button type="submit" className="btn w-full btn--primary" disabled={loading}
+                style={{ padding: "10px", fontSize: "14px" }}>
                 {loading ? <><span className="spinner" />Verifying…</> : <>Start Exam <ArrowRight size={18} /></>}
               </button>
             </form>

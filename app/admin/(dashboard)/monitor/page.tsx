@@ -149,14 +149,14 @@ export default function LiveMonitorPage() {
   }[s]);
 
   return (
-    <div className="max-w-7xl mx-auto space-y-8 fade-in">
+    <div className="max-w-7xl mx-auto space-y-8 fade-in text-[var(--color-text-primary)]">
       {/* Header */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
           <h1 className="text-2xl font-bold flex items-center gap-2">
-            <Activity size={22} style={{ color: "var(--accent-primary)" }} /> Live Proctoring Monitor
+            <Activity size={22} style={{ color: "var(--color-accent)" }} /> Live Proctoring Monitor
           </h1>
-          <p className="text-sm flex items-center gap-1 mt-1" style={{ color: "var(--text-muted)" }}>
+          <p className="text-sm flex items-center gap-1 mt-1" style={{ color: "var(--color-text-muted)" }}>
             <Wifi size={12} className="text-emerald-400 animate-pulse" /> Real-time active proctoring feeds
           </p>
         </div>
@@ -178,7 +178,7 @@ export default function LiveMonitorPage() {
             </div>
           )}
           {selectedExamId && (
-            <button onClick={() => fetchStatus(selectedExamId)} className="btn btn-secondary btn-sm h-9">
+            <button onClick={() => fetchStatus(selectedExamId)} className="btn btn--secondary btn--sm h-9">
               <RefreshCw size={12} /> Refresh
             </button>
           )}
@@ -186,13 +186,13 @@ export default function LiveMonitorPage() {
       </div>
 
       {exams.length === 0 ? (
-        <div className="glass-card p-16 text-center">
+        <div className="card card--elevated p-16 text-center">
           <p className="text-5xl mb-4">📺</p>
           <h2 className="text-xl font-bold mb-2">No exams to monitor</h2>
-          <p className="mb-6" style={{ color: "var(--text-secondary)" }}>
+          <p className="mb-6" style={{ color: "var(--color-text-secondary)" }}>
             Create an exam and import students to start live proctoring monitoring.
           </p>
-          <Link href="/admin/exams/new" className="btn btn-primary">
+          <Link href="/admin/exams/new" className="btn btn--primary">
             Create Exam
           </Link>
         </div>
@@ -201,90 +201,61 @@ export default function LiveMonitorPage() {
           {/* Status counters */}
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
             {[
-              { key: "active", label: "Active Testing", color: "var(--success)" },
-              { key: "submitted", label: "Submitted", color: "var(--info)" },
-              { key: "idle", label: "Idle > 3min", color: "var(--warning)" },
-              { key: "not_started", label: "Not Started", color: "var(--text-muted)" },
+              { key: "active", label: "Active Testing", color: "var(--color-success)" },
+              { key: "submitted", label: "Submitted", color: "var(--color-info)" },
+              { key: "idle", label: "Idle > 3min", color: "var(--color-warning)" },
+              { key: "not_started", label: "Not Started", color: "var(--color-text-muted)" },
             ].map(({ key, label, color }) => (
-              <div key={key} className="glass-card p-5 text-center">
+              <div key={key} className="card card--elevated p-5 text-center">
                 <p className="text-3xl font-bold" style={{ color }}>{counts[key as keyof typeof counts]}</p>
-                <p className="text-xs mt-1 font-semibold uppercase tracking-wider" style={{ color: "var(--text-muted)" }}>{label}</p>
+                <p className="text-xs mt-1 font-semibold uppercase tracking-wider" style={{ color: "var(--color-text-muted)" }}>{label}</p>
               </div>
             ))}
           </div>
 
           {/* Student Grid */}
-          <div className="glass-card overflow-hidden">
-            <div className="p-5 border-b flex items-center justify-between font-bold" style={{ borderColor: "var(--border-subtle)" }}>
+          <div className="card card--elevated overflow-hidden">
+            <div className="p-5 border-b flex items-center justify-between font-bold" style={{ borderColor: "var(--color-border-subtle)" }}>
               <span>Live Student Roster ({students.length} enrolled)</span>
               <span className="text-xs font-normal text-slate-500">Last updated: {lastRefresh.toLocaleTimeString()}</span>
             </div>
-            <div className="overflow-x-auto">
-              <table className="w-full text-sm">
-                <thead style={{ background: "rgba(255,255,255,0.03)" }}>
-                  <tr className="border-b" style={{ borderColor: "var(--border-subtle)" }}>
-                    {["Roll No", "Name", "Status", "Tab Switches", "Fullscreen Exits", "DevTools", "Last Active"].map((h) => (
-                      <th key={h} className="text-left px-4 py-3 text-xs font-semibold uppercase tracking-wider"
-                        style={{ color: "var(--text-muted)" }}>{h}</th>
-                    ))}
-                  </tr>
-                </thead>
-                <tbody>
-                  {loading && students.length === 0 ? (
-                    <tr>
-                      <td colSpan={7} className="px-4 py-16 text-center">
-                        <span className="spinner mx-auto block mb-2" />
-                        <span className="text-xs text-slate-500">Loading student roster...</span>
-                      </td>
-                    </tr>
-                  ) : students.length === 0 ? (
-                    <tr>
-                      <td colSpan={7} className="px-4 py-16 text-center text-slate-500">
-                        <FileText size={32} className="mx-auto mb-2 text-slate-600" />
-                        No students enrolled in this exam. Go to Config to upload the student roster list.
-                      </td>
-                    </tr>
-                  ) : (
-                    students.map((s) => {
-                      const highRisk = s.tab_switches > 2 || s.fullscreen_exits > 1 || s.devtools_attempts > 0;
-                      return (
-                        <tr key={s.roll_no}
-                          className="border-t transition-colors hover:bg-white/[0.01]"
-                          style={{
-                            borderColor: "var(--border-subtle)",
-                            background: highRisk ? "rgba(248,113,113,0.04)" : undefined,
-                          }}>
-                          <td className="px-4 py-3 font-mono text-xs">{s.roll_no}</td>
-                          <td className="px-4 py-3 font-medium">{s.name}</td>
-                          <td className="px-4 py-3">
-                            <span className={`badge ${statusStyle(s.status)} flex items-center gap-1.5 w-fit text-[11px]`}>
-                              {statusIcon(s.status)} {s.status.replace("_", " ")}
-                            </span>
-                          </td>
-                          <td className="px-4 py-3">
-                            <span style={{ color: s.tab_switches > 2 ? "var(--danger)" : "var(--text-primary)", fontWeight: s.tab_switches > 0 ? 600 : 400 }}>
-                              {s.tab_switches}
-                            </span>
-                          </td>
-                          <td className="px-4 py-3">
-                            <span style={{ color: s.fullscreen_exits > 0 ? "var(--danger)" : "var(--text-primary)", fontWeight: s.fullscreen_exits > 0 ? 600 : 400 }}>
-                              {s.fullscreen_exits}
-                            </span>
-                          </td>
-                          <td className="px-4 py-3">
-                            <span style={{ color: s.devtools_attempts > 0 ? "var(--danger)" : "var(--text-primary)", fontWeight: s.devtools_attempts > 0 ? 600 : 400 }}>
-                              {s.devtools_attempts}
-                            </span>
-                          </td>
-                          <td className="px-4 py-3 text-xs" style={{ color: "var(--text-secondary)" }}>
-                            {s.last_seen_at ? new Date(s.last_seen_at).toLocaleTimeString() : "—"}
-                          </td>
-                        </tr>
-                      );
-                    })
-                  )}
-                </tbody>
-              </table>
+            <div className="p-5">
+              {loading && students.length === 0 ? (
+                <div className="py-16 text-center">
+                  <span className="spinner mx-auto block mb-2" />
+                  <span className="text-xs text-slate-500">Loading student roster...</span>
+                </div>
+              ) : students.length === 0 ? (
+                <div className="py-16 text-center text-slate-500">
+                  <FileText size={32} className="mx-auto mb-2 text-slate-600" />
+                  No students enrolled in this exam. Go to Config to upload the student roster list.
+                </div>
+              ) : (
+                <div className="live-grid">
+                  {students.map((s) => {
+                    const highRisk = s.tab_switches > 2 || s.fullscreen_exits > 1 || s.devtools_attempts > 0;
+                    return (
+                      <div key={s.roll_no} className={`live-tile ${highRisk ? 'live-tile--violation' : ''}`}>
+                        <div className="live-tile__avatar" style={{ background: highRisk ? "var(--color-danger)" : "var(--color-accent-subtle)", color: highRisk ? "#fff" : "var(--color-accent-light)" }}>
+                          {s.name.charAt(0)}
+                        </div>
+                        <div className="live-tile__name" title={s.name}>{s.name}</div>
+                        <div className="text-[10px] text-slate-500 font-mono mt-0.5">{s.roll_no}</div>
+                        <div className={`live-tile__status ${highRisk ? 'live-tile__status--violation' : s.status === 'active' ? 'live-tile__status--active' : ''}`}>
+                          {s.status.replace("_", " ")}
+                        </div>
+                        {(s.tab_switches > 0 || s.fullscreen_exits > 0 || s.devtools_attempts > 0) && (
+                          <div className="flex justify-center gap-2 mt-2 text-[10px] font-bold" style={{ color: highRisk ? "var(--color-danger)" : "var(--color-warning)" }}>
+                            {s.tab_switches > 0 && <span title="Tab Switches">T:{s.tab_switches}</span>}
+                            {s.fullscreen_exits > 0 && <span title="Fullscreen Exits">F:{s.fullscreen_exits}</span>}
+                            {s.devtools_attempts > 0 && <span title="DevTools">D:{s.devtools_attempts}</span>}
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
             </div>
           </div>
         </>

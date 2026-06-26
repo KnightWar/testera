@@ -9,6 +9,11 @@ export async function middleware(request: NextRequest) {
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
   const pathname = request.nextUrl.pathname;
+  
+  // Redirect /admin exactly to /admin/dashboard to prevent 404
+  if (pathname === "/admin") {
+    return NextResponse.redirect(new URL("/admin/dashboard", request.url));
+  }
 
   // If env vars are missing, allow the request through (Vercel will surface the real error)
   if (!supabaseUrl || !supabaseAnonKey) {
