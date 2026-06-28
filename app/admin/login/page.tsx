@@ -87,7 +87,7 @@ export default function AdminLoginPage() {
             Admin Login
           </h1>
           <p className="text-xs text-[--text-secondary] text-center mb-7">
-            School of Computer Science and Engineering — Testera
+            Prav-AI - Skill Enhancer
           </p>
 
           <form onSubmit={handleSubmit} className="space-y-4">

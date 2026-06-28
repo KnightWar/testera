@@ -92,7 +92,7 @@ export default function AdminNav({ userEmail }: { userEmail: string }) {
         <img src="/logo.png" alt="Prav-AI Logo" className="w-8 h-8 object-contain" />
         <div>
           <p className="text-sm font-bold text-slate-900 leading-none tracking-tight">PRAV-AI</p>
-          <p className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider mt-0.5">SKILL ENHANCER PLATFORM</p>
+          <p className="text-[10px] font-semibold text-slate-800 uppercase tracking-wider mt-0.5">SKILL ENHANCER PLATFORM</p>
         </div>
       </div>
 
@@ -125,7 +125,7 @@ export default function AdminNav({ userEmail }: { userEmail: string }) {
           </div>
           <div className="flex-1 min-w-0">
             <p className="text-xs font-semibold text-slate-800 truncate">{userEmail}</p>
-            <p className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider">SoCSE Admin</p>
+            <p className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider">Assesor Admin</p>
           </div>
         </div>
         <button
