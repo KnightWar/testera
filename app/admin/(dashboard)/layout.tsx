@@ -1,6 +1,7 @@
 import { createServerSideClient } from "@/lib/supabase-server";
 import { redirect } from "next/navigation";
 import AdminNav from "@/components/admin/AdminNav";
+import AdminInactivityTimeout from "@/components/admin/AdminInactivityTimeout";
 
 export default async function AdminLayout({ children }: { children: React.ReactNode }) {
   const supabase = await createServerSideClient();
@@ -23,12 +24,12 @@ export default async function AdminLayout({ children }: { children: React.ReactN
   }
 
   return (
-    <div className="admin-theme min-h-screen flex">
+    <div className="pl-[220px] min-h-screen bg-[--bg-base]">
       <AdminNav userEmail={user.email ?? ""} />
-      <main className="admin-main-content p-8" style={{ background: "var(--bg-base)" }}>
+      <AdminInactivityTimeout />
+      <main className="max-w-[1200px] mx-auto px-8 py-8 page-enter">
         {children}
       </main>
     </div>
   );
-
 }

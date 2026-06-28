@@ -1,8 +1,8 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
-import { GraduationCap, Lock, Mail, Eye, EyeOff, Shield } from "lucide-react";
+import { GraduationCap, Lock, Mail, Eye, EyeOff, Shield, Sun, Moon, AlertTriangle, ArrowRight } from "lucide-react";
 import { createClient } from "@/lib/supabase";
 
 export default function AdminLoginPage() {
@@ -12,6 +12,28 @@ export default function AdminLoginPage() {
   const [showPass, setShowPass] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+  const [theme, setTheme] = useState<"light" | "dark">("dark");
+  const [timeoutActive, setTimeoutActive] = useState(false);
+
+  useEffect(() => {
+    const saved = localStorage.getItem("theme") as "light" | "dark" | null;
+    if (saved) {
+      setTheme(saved);
+      document.documentElement.setAttribute("data-theme", saved);
+    }
+
+    const params = new URLSearchParams(window.location.search);
+    if (params.get("timeout") === "1") {
+      setTimeoutActive(true);
+    }
+  }, []);
+
+  const toggleTheme = () => {
+    const nextTheme = theme === "dark" ? "light" : "dark";
+    setTheme(nextTheme);
+    localStorage.setItem("theme", nextTheme);
+    document.documentElement.setAttribute("data-theme", nextTheme);
+  };
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -20,7 +42,8 @@ export default function AdminLoginPage() {
 
     try {
       const supabase = createClient();
-      const { error: authError } = await supabase.auth.signInWithPassword({ email, password });
+      const resolvedEmail = `${email.trim()}@socse.edu`;
+      const { error: authError } = await supabase.auth.signInWithPassword({ email: resolvedEmail, password });
 
       if (authError) {
         setError(authError.message);
@@ -31,7 +54,17 @@ export default function AdminLoginPage() {
         // cookies are fully flushed before the middleware auth check.
         router.refresh();
         setTimeout(() => {
-          window.location.href = "/admin/dashboard";
+          let destination = "/admin/dashboard";
+          const saved = localStorage.getItem("testera_admin_saved_state");
+          if (saved) {
+            try {
+              const state = JSON.parse(saved);
+              if (state.pathname && Date.now() - state.timestamp < 15 * 60 * 1000) {
+                destination = state.pathname;
+              }
+            } catch { }
+          }
+          window.location.href = destination;
         }, 200);
       }
     } catch (err: any) {
@@ -41,54 +74,53 @@ export default function AdminLoginPage() {
   }
 
   return (
-    <main className="min-h-screen flex items-center justify-center px-4 relative overflow-hidden">
-      <div
-        className="absolute inset-0 pointer-events-none"
-        style={{ background: "radial-gradient(ellipse at 50% 0%, rgba(108,99,255,0.2) 0%, transparent 65%)" }}
-      />
-
-      <div className="relative w-full max-w-md fade-in">
-        {/* Header */}
-        <div className="text-center mb-8">
-          <div className="w-16 h-16 rounded-2xl flex items-center justify-center mx-auto mb-4"
-            style={{ background: "linear-gradient(135deg, #6C63FF, #8B5CF6)", boxShadow: "0 8px 32px rgba(108,99,255,0.4)" }}>
-            <GraduationCap size={32} />
-          </div>
-          <h1 className="text-3xl font-bold gradient-text mb-1">Testera Admin</h1>
-          <p style={{ color: "var(--text-secondary)" }}>Department of SoCSE</p>
+    <div className="min-h-screen bg-[--bg-base] flex items-center justify-center p-4">
+      <div className="w-full max-w-[420px] space-y-6">
+        {/* Logo */}
+        <div className="flex justify-center">
+          <img src="/logo.png" alt="Prav-AI Logo" className="w-12 h-12 object-contain" />
         </div>
 
-        {/* Card */}
-        <div className="card card--elevated p-8">
-          <div className="flex items-center gap-2 mb-6 p-3 rounded-lg"
-            style={{ background: "var(--color-accent-subtle)", border: "1px solid var(--color-accent-glow)" }}>
-            <Shield size={16} style={{ color: "var(--color-accent-light)" }} className="shrink-0" />
-            <span className="text-sm" style={{ color: "var(--color-accent-light)" }}>Admin access only. Students use the separate portal.</span>
-          </div>
+        {/* Login Card */}
+        <div className="card p-8">
+          <h1 className="text-lg font-bold text-[--text-primary] text-center mb-1">
+            Admin Login
+          </h1>
+          <p className="text-xs text-[--text-secondary] text-center mb-7">
+            School of Computer Science and Engineering — Testera
+          </p>
 
-          <form onSubmit={handleSubmit}>
-            <div className="form-group">
-              <label className="form-label">Email Address</label>
-              <div className="relative">
-                <Mail size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500" />
-                <input
-                  type="email"
-                  className="form-input pl-9"
-                  placeholder="admin@socse.edu"
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  required
-                />
+          <form onSubmit={handleSubmit} className="space-y-4">
+            {timeoutActive && (
+              <div className="p-3.5 rounded-md text-xs bg-amber-500/10 text-amber-500 border border-amber-500/20 font-medium leading-relaxed">
+                You have been signed out due to inactivity. Log in again to restore your workspace progress.
               </div>
+            )}
+
+            {/* Admin ID */}
+            <div>
+              <label className="block text-[11px] font-semibold text-[--text-muted] uppercase tracking-wider mb-1.5">
+                Admin ID
+              </label>
+              <input
+                type="text"
+                className="w-full h-10 px-4 bg-[--bg-input] text-[--text-primary] placeholder:text-[--text-muted] border border-[--border] rounded-md text-sm focus:outline-none focus:border-[--border-accent]"
+                placeholder="e.g. admin"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                required
+              />
             </div>
 
-            <div className="form-group">
-              <label className="form-label">Password</label>
+            {/* Password */}
+            <div>
+              <label className="block text-[11px] font-semibold text-[--text-muted] uppercase tracking-wider mb-1.5">
+                Password
+              </label>
               <div className="relative">
-                <Lock size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500" />
                 <input
                   type={showPass ? "text" : "password"}
-                  className="form-input pl-9 pr-10"
+                  className="w-full h-10 pl-4 pr-10 bg-[--bg-input] text-[--text-primary] placeholder:text-[--text-muted] border border-[--border] rounded-md text-sm focus:outline-none focus:border-[--border-accent]"
                   placeholder="••••••••"
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
@@ -96,7 +128,7 @@ export default function AdminLoginPage() {
                 />
                 <button
                   type="button"
-                  className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-500 hover:text-slate-300"
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-[--text-muted] hover:text-[--text-secondary] cursor-pointer"
                   onClick={() => setShowPass(!showPass)}
                 >
                   {showPass ? <EyeOff size={16} /> : <Eye size={16} />}
@@ -105,17 +137,31 @@ export default function AdminLoginPage() {
             </div>
 
             {error && (
-              <div className="mb-4 p-3 rounded-lg text-sm" style={{ background: "rgba(248,113,113,0.1)", color: "var(--color-danger)", border: "1px solid rgba(248,113,113,0.3)" }}>
+              <div className="p-3 rounded-md text-xs bg-[--red-bg] text-[--red] border border-red-500/20 font-medium">
                 {error}
               </div>
             )}
 
-            <button type="submit" className="btn btn--primary w-full" disabled={loading} style={{ padding: "10px", fontSize: "14px" }}>
-              {loading ? <><span className="spinner" />Signing in…</> : "Sign In"}
+            {/* Submit Button */}
+            <button
+              type="submit"
+              className="btn btn-primary w-full h-10 flex items-center justify-center gap-2 mt-2 cursor-pointer rounded-md font-bold text-sm"
+              disabled={loading}
+            >
+              {loading ? (
+                <>
+                  <span className="spinner" /> Verifying…
+                </>
+              ) : (
+                <>
+                  Sign In <ArrowRight size={14} />
+                </>
+              )}
             </button>
           </form>
+
         </div>
       </div>
-    </main>
+    </div>
   );
 }

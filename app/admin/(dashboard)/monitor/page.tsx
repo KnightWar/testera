@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { createClient } from "@/lib/supabase";
-import { Activity, Circle, CheckCircle2, AlertTriangle, Wifi, RefreshCw, FileText } from "lucide-react";
+import { Activity, Circle, CheckCircle2, AlertTriangle, RefreshCw, FileText } from "lucide-react";
 import Link from "next/link";
 
 interface StudentStatus {
@@ -15,6 +15,15 @@ interface StudentStatus {
   devtools_attempts: number;
   last_seen_at: string | null;
   submitted_at: string | null;
+}
+
+function getInitialsColor(name: string) {
+  const charCode = name.charCodeAt(0) || 0;
+  const index = charCode % 4;
+  if (index === 0) return { bg: "bg-indigo-50 border-indigo-100", text: "text-indigo-600" };
+  if (index === 1) return { bg: "bg-teal-50 border-teal-100", text: "text-teal-600" };
+  if (index === 2) return { bg: "bg-rose-50 border-rose-100", text: "text-rose-600" };
+  return { bg: "bg-amber-50 border-amber-100", text: "text-amber-600" };
 }
 
 export default function LiveMonitorPage() {
@@ -134,38 +143,63 @@ export default function LiveMonitorPage() {
     not_started: students.filter((s) => s.status === "not_started").length,
   };
 
-  const statusStyle = (status: StudentStatus["status"]) => ({
-    active: "badge-success",
-    submitted: "badge-info",
-    idle: "badge-warning",
-    not_started: "badge-neutral",
-  }[status]);
+  const getCardBorder = (status: StudentStatus["status"], highRisk: boolean) => {
+    if (highRisk) return "border-t-[3px] border-t-[--red]";
+    switch (status) {
+      case "active":
+        return "border-t-[3px] border-t-[--green]";
+      case "submitted":
+        return "border-t-[3px] border-t-slate-300";
+      case "idle":
+        return "border-t-[3px] border-t-[--accent]";
+      default:
+        return "border-t border-t-[--border]";
+    }
+  };
 
-  const statusIcon = (s: StudentStatus["status"]) => ({
-    active: <Circle size={8} className="fill-current animate-pulse text-emerald-400" />,
-    submitted: <CheckCircle2 size={10} style={{ color: "var(--info)" }} />,
-    idle: <AlertTriangle size={10} style={{ color: "var(--warning)" }} />,
-    not_started: <Circle size={8} style={{ color: "var(--text-muted)" }} />,
-  }[s]);
+  const getStatusColor = (status: StudentStatus["status"]) => {
+    switch (status) {
+      case "active":
+        return "text-[--green]";
+      case "submitted":
+        return "text-slate-400";
+      case "idle":
+        return "text-[--amber]";
+      default:
+        return "text-slate-400";
+    }
+  };
+
+  const getStatusIcon = (status: StudentStatus["status"]) => {
+    switch (status) {
+      case "active":
+        return <Circle size={8} className="fill-current animate-pulse text-[--green]" />;
+      case "submitted":
+        return <CheckCircle2 size={10} className="text-slate-400" />;
+      case "idle":
+        return <AlertTriangle size={10} className="text-[--amber]" />;
+      default:
+        return <Circle size={8} className="text-slate-300" />;
+    }
+  };
 
   return (
-    <div className="max-w-7xl mx-auto space-y-8 fade-in text-[var(--color-text-primary)]">
+    <div className="space-y-6">
       {/* Header */}
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-[--border] pb-5">
         <div>
-          <h1 className="text-2xl font-bold flex items-center gap-2">
-            <Activity size={22} style={{ color: "var(--color-accent)" }} /> Live Proctoring Monitor
+          <h1 className="text-2xl font-bold text-[--text-primary] tracking-tight flex items-center gap-2">
+            <Activity className="text-[--red] animate-pulse" size={20} />
+            Live Proctoring Monitor
           </h1>
-          <p className="text-sm flex items-center gap-1 mt-1" style={{ color: "var(--color-text-muted)" }}>
-            <Wifi size={12} className="text-emerald-400 animate-pulse" /> Real-time active proctoring feeds
-          </p>
+          <p className="text-sm text-[--text-secondary] mt-1 font-sans">Real-time active proctoring feeds</p>
         </div>
         <div className="flex items-center gap-3">
           {exams.length > 0 && (
             <div className="flex items-center gap-2">
-              <label className="text-xs font-semibold uppercase tracking-wider text-slate-400">Exam:</label>
+              <label className="text-xs font-semibold uppercase tracking-wider text-[--text-secondary]">Exam:</label>
               <select
-                className="form-input text-xs w-64 h-9 py-1"
+                className="h-9 px-3 bg-white border border-[--border] rounded-md text-xs text-[--text-primary] focus:outline-none focus:border-[--border-accent]"
                 value={selectedExamId}
                 onChange={(e) => setSelectedExamId(e.target.value)}
               >
@@ -178,85 +212,97 @@ export default function LiveMonitorPage() {
             </div>
           )}
           {selectedExamId && (
-            <button onClick={() => fetchStatus(selectedExamId)} className="btn btn--secondary btn--sm h-9">
-              <RefreshCw size={12} /> Refresh
+            <button
+              onClick={() => fetchStatus(selectedExamId)}
+              className="btn btn-ghost btn-sm"
+              title="Refresh live status feed"
+            >
+              <RefreshCw size={14} />
             </button>
           )}
         </div>
       </div>
 
       {exams.length === 0 ? (
-        <div className="card card--elevated p-16 text-center">
+        <div className="card p-16 text-center">
           <p className="text-5xl mb-4">📺</p>
-          <h2 className="text-xl font-bold mb-2">No exams to monitor</h2>
-          <p className="mb-6" style={{ color: "var(--color-text-secondary)" }}>
+          <h2 className="text-lg font-bold mb-2">No exams to monitor</h2>
+          <p className="mb-6 text-[--text-secondary]">
             Create an exam and import students to start live proctoring monitoring.
           </p>
-          <Link href="/admin/exams/new" className="btn btn--primary">
-            Create Exam
+          <Link href="/admin/exams" className="btn btn-primary btn-sm">
+            Go to Exams
           </Link>
         </div>
       ) : (
         <>
           {/* Status counters */}
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+          <div className="grid grid-cols-4 gap-[14px]">
             {[
-              { key: "active", label: "Active Testing", color: "var(--color-success)" },
-              { key: "submitted", label: "Submitted", color: "var(--color-info)" },
-              { key: "idle", label: "Idle > 3min", color: "var(--color-warning)" },
-              { key: "not_started", label: "Not Started", color: "var(--color-text-muted)" },
+              { key: "active", label: "Active Testing", color: "text-[--green]" },
+              { key: "submitted", label: "Submitted", color: "text-[--accent]" },
+              { key: "idle", label: "Idle > 3 Min", color: "text-[--amber]" },
+              { key: "not_started", label: "Not Started", color: "text-[--secondary]" },
             ].map(({ key, label, color }) => (
-              <div key={key} className="card card--elevated p-5 text-center">
-                <p className="text-3xl font-bold" style={{ color }}>{counts[key as keyof typeof counts]}</p>
-                <p className="text-xs mt-1 font-semibold uppercase tracking-wider" style={{ color: "var(--color-text-muted)" }}>{label}</p>
+              <div key={key} className="card p-4 text-center">
+                <p className={`text-3xl font-display font-bold ${color}`}>{counts[key as keyof typeof counts]}</p>
+                <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mt-1">{label}</p>
               </div>
             ))}
           </div>
 
-          {/* Student Grid */}
-          <div className="card card--elevated overflow-hidden">
-            <div className="p-5 border-b flex items-center justify-between font-bold" style={{ borderColor: "var(--color-border-subtle)" }}>
-              <span>Live Student Roster ({students.length} enrolled)</span>
-              <span className="text-xs font-normal text-slate-500">Last updated: {lastRefresh.toLocaleTimeString()}</span>
+          {/* Student Grid Panel */}
+          <div className="card p-6">
+            <div className="flex items-center justify-between pb-4 border-b border-[--border] mb-6">
+              <span className="text-sm font-bold text-[--text-primary]">Live Student Feeds ({students.length} enrolled)</span>
+              <span className="text-xs text-[--text-secondary]">Last updated: {lastRefresh.toLocaleTimeString()}</span>
             </div>
-            <div className="p-5">
-              {loading && students.length === 0 ? (
-                <div className="py-16 text-center">
-                  <span className="spinner mx-auto block mb-2" />
-                  <span className="text-xs text-slate-500">Loading student roster...</span>
-                </div>
-              ) : students.length === 0 ? (
-                <div className="py-16 text-center text-slate-500">
-                  <FileText size={32} className="mx-auto mb-2 text-slate-600" />
-                  No students enrolled in this exam. Go to Config to upload the student roster list.
-                </div>
-              ) : (
-                <div className="live-grid">
-                  {students.map((s) => {
-                    const highRisk = s.tab_switches > 2 || s.fullscreen_exits > 1 || s.devtools_attempts > 0;
-                    return (
-                      <div key={s.roll_no} className={`live-tile ${highRisk ? 'live-tile--violation' : ''}`}>
-                        <div className="live-tile__avatar" style={{ background: highRisk ? "var(--color-danger)" : "var(--color-accent-subtle)", color: highRisk ? "#fff" : "var(--color-accent-light)" }}>
-                          {s.name.charAt(0)}
-                        </div>
-                        <div className="live-tile__name" title={s.name}>{s.name}</div>
-                        <div className="text-[10px] text-slate-500 font-mono mt-0.5">{s.roll_no}</div>
-                        <div className={`live-tile__status ${highRisk ? 'live-tile__status--violation' : s.status === 'active' ? 'live-tile__status--active' : ''}`}>
-                          {s.status.replace("_", " ")}
-                        </div>
-                        {(s.tab_switches > 0 || s.fullscreen_exits > 0 || s.devtools_attempts > 0) && (
-                          <div className="flex justify-center gap-2 mt-2 text-[10px] font-bold" style={{ color: highRisk ? "var(--color-danger)" : "var(--color-warning)" }}>
-                            {s.tab_switches > 0 && <span title="Tab Switches">T:{s.tab_switches}</span>}
-                            {s.fullscreen_exits > 0 && <span title="Fullscreen Exits">F:{s.fullscreen_exits}</span>}
-                            {s.devtools_attempts > 0 && <span title="DevTools">D:{s.devtools_attempts}</span>}
-                          </div>
-                        )}
+
+            {loading && students.length === 0 ? (
+              <div className="py-16 text-center">
+                <span className="spinner mx-auto block mb-2" />
+                <span className="text-xs text-[--text-secondary]">Loading student status...</span>
+              </div>
+            ) : students.length === 0 ? (
+              <div className="py-16 text-center text-[--text-secondary]">
+                <FileText size={32} className="mx-auto mb-2 text-[--text-muted]" />
+                No students enrolled in this exam. Go to Configuration to assign students.
+              </div>
+            ) : (
+              <div className="grid grid-cols-[repeat(auto-fill,minmax(180px,1fr))] gap-4">
+                {students.map((s) => {
+                  const highRisk = s.tab_switches > 2 || s.fullscreen_exits > 1 || s.devtools_attempts > 0;
+                  const colorPair = getInitialsColor(s.name);
+                  return (
+                    <div
+                      key={s.roll_no}
+                      className={`card p-5 text-center transition-all duration-150 bg-white ${getCardBorder(s.status, highRisk)}`}
+                    >
+                      <div className={`w-10 h-10 rounded-full border flex items-center justify-center text-xs font-bold mx-auto mb-3 shrink-0 ${colorPair.bg}`}>
+                        <span className={colorPair.text}>{s.name.charAt(0).toUpperCase()}</span>
                       </div>
-                    );
-                  })}
-                </div>
-              )}
-            </div>
+                      <div className="text-[13px] font-bold text-[--text-primary] truncate" title={s.name}>
+                        {s.name}
+                      </div>
+                      <div className="font-mono text-[10.5px] text-[--text-secondary] mt-0.5">
+                        {s.roll_no}
+                      </div>
+                      <div className={`text-[10px] uppercase tracking-wider font-bold flex items-center justify-center gap-1.5 mt-2.5 ${getStatusColor(s.status)}`}>
+                        {getStatusIcon(s.status)}
+                        <span>{s.status.replace("_", " ")}</span>
+                      </div>
+                      {(s.tab_switches > 0 || s.fullscreen_exits > 0 || s.devtools_attempts > 0) && (
+                        <div className={`flex justify-center gap-2 mt-3.5 text-[10px] font-mono font-bold ${highRisk ? 'text-[--red]' : 'text-[--amber]'}`}>
+                          {s.tab_switches > 0 && <span title="Tab Switches">T:{s.tab_switches}</span>}
+                          {s.fullscreen_exits > 0 && <span title="Fullscreen Exits">F:{s.fullscreen_exits}</span>}
+                          {s.devtools_attempts > 0 && <span title="DevTools">D:{s.devtools_attempts}</span>}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            )}
           </div>
         </>
       )}

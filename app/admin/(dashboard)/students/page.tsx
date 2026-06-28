@@ -16,6 +16,15 @@ interface MasterStudent {
   group_name: string;
 }
 
+function getInitialsColor(name: string) {
+  const charCode = name.charCodeAt(0) || 0;
+  const index = charCode % 4;
+  if (index === 0) return { bg: "bg-indigo-50 border-indigo-100", text: "text-indigo-600" };
+  if (index === 1) return { bg: "bg-teal-50 border-teal-100", text: "text-teal-600" };
+  if (index === 2) return { bg: "bg-rose-50 border-rose-100", text: "text-rose-600" };
+  return { bg: "bg-amber-50 border-amber-100", text: "text-amber-600" };
+}
+
 export default function StudentsDirectoryPage() {
   const [students, setStudents] = useState<MasterStudent[]>([]);
   const [loading, setLoading] = useState(true);
@@ -277,75 +286,73 @@ export default function StudentsDirectoryPage() {
   }
 
   return (
-    <div className="max-w-7xl mx-auto space-y-8 fade-in text-[var(--color-text-primary)]">
+    <div className="space-y-6">
       {/* Header */}
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-[--border] pb-5">
         <div>
-          <h1 className="text-3xl font-extrabold tracking-tight flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl flex items-center justify-center" style={{ background: "var(--color-accent-subtle)" }}>
-              <Users size={22} style={{ color: "var(--color-accent)" }} />
-            </div>
+          <h1 className="text-xl font-bold text-[--text-primary] tracking-tight flex items-center gap-2">
+            <Users size={20} className="text-[--accent]" />
             Master Student Directory
           </h1>
-          <p className="mt-1 text-secondary">View, manage, and upload the master examinee roster</p>
+          <p className="text-sm text-[--text-secondary] mt-1">View, manage, and upload the master examinee roster</p>
         </div>
-        <div className="flex gap-2">
-          <button 
-            onClick={() => setShowUploadPanel(!showUploadPanel)} 
-            className="btn btn--primary"
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => setShowUploadPanel(!showUploadPanel)}
+            className="btn btn-primary btn-sm"
           >
-            <Upload size={16} /> Bulk Roster Upload
+            <Upload size={14} /> Bulk Roster Upload
           </button>
-          <button 
-            onClick={loadData} 
-            className="btn btn--secondary btn--sm"
+          <button
+            onClick={loadData}
+            className="btn btn-ghost btn-sm"
             title="Refresh student roster list"
           >
-            <RefreshCw size={15} />
+            <RefreshCw size={14} />
           </button>
         </div>
       </div>
 
-      {/* Bulk Upload Panel (Inline layout, no overlays) */}
+      {/* Bulk Upload Panel */}
       {showUploadPanel && (
-        <div className="card card--elevated p-6 border-l-4 fade-in" style={{ borderLeftColor: "var(--color-accent-secondary)", background: "var(--color-accent-subtle)" }}>
+        <div className="card p-6 relative">
           <div className="flex items-center justify-between mb-4">
-            <h3 className="text-lg font-bold flex items-center gap-2" style={{ color: "var(--color-accent-light)" }}>
-              <Upload size={18} />
-              Upload Student Roster
-            </h3>
-            <button onClick={() => setShowUploadPanel(false)} className="text-secondary hover:text-primary">
+            <div className="flex items-center gap-2">
+              <Upload size={18} className="text-[--accent-light]" />
+              <h3 className="text-sm font-bold text-[--text-primary]">
+                Upload Student Roster
+              </h3>
+            </div>
+            <button onClick={() => setShowUploadPanel(false)} className="text-[--text-secondary] hover:text-[--text-primary] bg-transparent border-0 cursor-pointer">
               <X size={18} />
             </button>
           </div>
 
-          <div className="grid grid-cols-1 gap-6 items-end">
-            <div className="form-group mb-0">
-              <label className="form-label flex justify-between items-center">
-                <span>Select Excel File (.xlsx with Roll_No, Name, and optional Group columns)</span>
+          <div className="space-y-4">
+            <div>
+              <div className="flex justify-between items-center mb-2">
+                <span className="text-xs font-semibold text-[--text-secondary]">Select Excel File (.xlsx with Roll_No, Name, and optional Group columns)</span>
                 <button
                   type="button"
                   onClick={handleDownloadStudentTemplate}
-                  className="text-xs flex items-center gap-1 font-semibold transition-colors"
-                  style={{ color: "var(--color-accent)" }}
+                  className="text-xs text-[--accent-light] hover:underline flex items-center gap-1 font-semibold bg-transparent border-0 cursor-pointer"
                 >
                   <Download size={13} />
                   Download Template
                 </button>
-              </label>
-              <input 
+              </div>
+              <input
                 ref={fileInputRef}
-                type="file" 
-                accept=".xlsx,.csv" 
-                className="form-input text-sm"
-                style={{ background: "var(--color-bg-input)", color: "var(--color-text-primary)" }}
-                onChange={(e) => setStudentFile(e.target.files?.[0] ?? null)} 
+                type="file"
+                accept=".xlsx,.csv"
+                className="w-full bg-[--bg-input] text-[--text-primary] placeholder:text-[--text-muted] border border-[--border] rounded-md px-3 py-2 text-sm focus:outline-none focus:border-[--border-accent]"
+                onChange={(e) => setStudentFile(e.target.files?.[0] ?? null)}
               />
             </div>
           </div>
 
           {studentErrors.length > 0 && (
-            <div className="mt-4 p-3 rounded-xl text-xs flex gap-2" style={{ background: "var(--color-danger-subtle)", color: "var(--color-danger)", border: "1px solid rgba(248,113,113,0.3)" }}>
+            <div className="mt-4 p-3 rounded-md text-xs bg-[--red-bg] text-[--red] border border-red-500/20 flex gap-2">
               <AlertCircle size={14} className="shrink-0 mt-0.5" />
               <div>
                 <span className="font-semibold">Parsing errors found:</span>
@@ -357,11 +364,11 @@ export default function StudentsDirectoryPage() {
           )}
 
           <div className="mt-5 flex gap-2 justify-end">
-            <button onClick={() => setShowUploadPanel(false)} className="btn btn--secondary btn--sm">Cancel</button>
-            <button 
-              onClick={handleStudentUpload} 
-              disabled={!studentFile || uploading} 
-              className="btn btn--primary btn--sm"
+            <button onClick={() => setShowUploadPanel(false)} className="btn btn-ghost btn-sm">Cancel</button>
+            <button
+              onClick={handleStudentUpload}
+              disabled={!studentFile || uploading}
+              className="btn btn-primary btn-sm"
             >
               {uploading ? "Uploading..." : "Start Import"}
             </button>
@@ -370,80 +377,75 @@ export default function StudentsDirectoryPage() {
       )}
 
       {/* Search & Filter Bar */}
-      <div className="card card--elevated p-4 flex items-center gap-3">
-        <div className="relative flex-1">
-          <Search size={18} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500" />
-          <input
-            type="text"
-            className="form-input pl-10"
-            style={{ background: "var(--color-bg-input)" }}
-            placeholder="Search by Roll No, Student Name, or Group..."
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-          />
-        </div>
+      <div className="relative">
+        <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 text-[--text-muted]" size={16} />
+        <input
+          type="text"
+          className="search-input w-full"
+          placeholder="Search by Roll No, Student Name, or Group..."
+          value={searchQuery}
+          onChange={(e) => setSearchQuery(e.target.value)}
+        />
       </div>
 
-      {/* Bulk Actions Panel */}
+      {/* Floating Bulk Actions Panel */}
       {selectedIds.length > 0 && (
-        <div className="card card--elevated p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-l-4 fade-in" style={{ borderLeftColor: "var(--color-accent)", background: "var(--color-accent-subtle)" }}>
-          <div className="text-sm font-semibold">
-            Selected <span style={{ color: "var(--color-accent-light)" }}>{selectedIds.length}</span> students
-          </div>
-          <div className="flex flex-wrap items-center gap-3">
-            <div className="flex gap-2 items-center">
-              <input
-                type="text"
-                placeholder="New group name..."
-                className="form-input text-xs py-1.5 px-3 max-w-[150px]"
-                style={{ background: "var(--color-bg-input)", border: "1px solid var(--color-border-subtle)" }}
-                value={bulkGroupName}
-                onChange={(e) => setBulkGroupName(e.target.value)}
-              />
-              <button
-                onClick={handleBulkAssignGroup}
-                disabled={!bulkGroupName.trim() || bulkProcessing}
-                className="btn btn--primary btn--sm py-1.5 px-3 text-xs"
-              >
-                Assign Group
-              </button>
-            </div>
+        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 flex items-center gap-4 px-6 py-3 bg-[--bg-elevated]/95 backdrop-blur-md border border-[--border-accent] rounded-md shadow-lg fade-in">
+          <span className="text-xs font-semibold text-[--text-secondary] whitespace-nowrap">
+            Selected <strong className="text-[--text-primary]">{selectedIds.length}</strong> students
+          </span>
+          <div className="flex gap-2 items-center">
+            <input
+              type="text"
+              placeholder="Group Name"
+              className="h-8 bg-[--bg-input] border border-[--border] rounded-md text-xs text-[--text-primary] px-2.5 focus:outline-none focus:border-[--border-accent] w-28"
+              value={bulkGroupName}
+              onChange={(e) => setBulkGroupName(e.target.value)}
+            />
             <button
-              onClick={handleBulkRemoveGroup}
-              disabled={bulkProcessing}
-              className="btn btn--secondary btn--sm py-1.5 px-3 text-xs"
+              onClick={handleBulkAssignGroup}
+              disabled={!bulkGroupName.trim() || bulkProcessing}
+              className="btn btn-primary btn-sm h-8"
             >
-              Remove Group
-            </button>
-            <button
-              onClick={handleBulkDelete}
-              disabled={bulkProcessing}
-              className="btn btn--danger btn--sm py-1.5 px-3 text-xs"
-            >
-              Delete Selected
+              Assign Group
             </button>
           </div>
+          <button
+            onClick={handleBulkRemoveGroup}
+            disabled={bulkProcessing}
+            className="btn btn-ghost btn-sm h-8"
+          >
+            Remove Group
+          </button>
+          <div className="w-px h-4 bg-[--border]" />
+          <button
+            onClick={handleBulkDelete}
+            disabled={bulkProcessing}
+            className="btn btn-danger btn-sm h-8"
+          >
+            Delete Selected
+          </button>
         </div>
       )}
 
       {/* Main Grid/Table Card */}
-      <div className="card card--elevated overflow-hidden">
-        <div className="p-5 border-b font-bold flex items-center justify-between" style={{ borderColor: "var(--color-border-subtle)", background: "var(--color-bg-surface)" }}>
-          <span className="text-sm font-semibold">Master Students List ({filteredStudents.length})</span>
+      <div className="card overflow-hidden">
+        <div className="px-5 py-4 border-b border-[--border] flex items-center justify-between">
+          <span className="text-sm font-bold text-[--text-primary]">Master Students List ({filteredStudents.length})</span>
           {students.length > 0 && searchQuery && (
-            <span className="text-xs font-normal text-slate-500">Filtered from {students.length} total</span>
+            <span className="text-xs text-[--text-secondary]">Filtered from {students.length} total</span>
           )}
         </div>
-        
+
         <div className="overflow-x-auto">
-          <table className="student-table w-full text-sm text-left">
+          <table className="w-full border-collapse">
             <thead>
-              <tr>
-                <th className="w-10">
+              <tr className="bg-[--bg-surface] border-b border-[--border]">
+                <th className="w-12 px-4 py-3 text-left">
                   <input
                     type="checkbox"
-                    className="w-4 h-4 rounded border-gray-300 cursor-pointer"
-                    style={{ accentColor: "var(--color-accent)" }}
+                    className="w-4 h-4 rounded border-[--border] cursor-pointer"
+                    style={{ accentColor: "var(--accent)" }}
                     checked={filteredStudents.length > 0 && selectedIds.length === filteredStudents.length}
                     onChange={(e) => {
                       if (e.target.checked) {
@@ -454,96 +456,102 @@ export default function StudentsDirectoryPage() {
                     }}
                   />
                 </th>
-                {["Roll No", "Student Name", "Group", "Actions"].map((h) => (
-                  <th key={h}>{h}</th>
-                ))}
+                <th className="px-4 py-2.5 text-left text-[11px] font-semibold text-[--text-muted] uppercase tracking-[0.7px]">Roll No</th>
+                <th className="px-4 py-2.5 text-left text-[11px] font-semibold text-[--text-muted] uppercase tracking-[0.7px]">Student Name</th>
+                <th className="px-4 py-2.5 text-left text-[11px] font-semibold text-[--text-muted] uppercase tracking-[0.7px]">Group</th>
+                <th className="px-4 py-2.5 text-right text-[11px] font-semibold text-[--text-muted] uppercase tracking-[0.7px] pr-8">Actions</th>
               </tr>
             </thead>
-            <tbody>
+            <tbody className="divide-y divide-[--border]">
               {loading ? (
                 <tr>
-                  <td colSpan={5} className="px-4 py-16 text-center">
+                  <td colSpan={5} className="px-5 py-16 text-center">
                     <span className="spinner mx-auto block mb-2" />
-                    <span className="text-xs text-slate-500">Loading student directory...</span>
+                    <span className="text-xs text-[--text-secondary]">Loading student directory...</span>
                   </td>
                 </tr>
               ) : filteredStudents.length === 0 ? (
                 <tr>
-                  <td colSpan={5} className="px-4 py-16 text-center text-slate-500">
-                    <GraduationCap size={40} className="mx-auto mb-2 text-slate-600 animate-pulse" />
+                  <td colSpan={5} className="px-5 py-16 text-center text-[--text-secondary]">
+                    <GraduationCap size={40} className="mx-auto mb-2 text-[--text-muted] animate-pulse" />
                     No students found. Try adjusting your search query, or upload a student roster above.
                   </td>
                 </tr>
               ) : (
-                filteredStudents.map((s) => (
-                  <tr key={s.id}>
-                    <td>
-                      <input
-                        type="checkbox"
-                        className="w-4 h-4 rounded border-gray-300 cursor-pointer"
-                        style={{ accentColor: "var(--color-accent)" }}
-                        checked={selectedIds.includes(s.id)}
-                        onChange={(e) => {
-                          if (e.target.checked) {
-                            setSelectedIds(prev => [...prev, s.id]);
-                          } else {
-                            setSelectedIds(prev => prev.filter(id => id !== s.id));
-                          }
-                        }}
-                      />
-                    </td>
-                    <td>
-                      <div className="font-mono text-[13px]">{s.roll_no}</div>
-                    </td>
-                    <td>
-                      <div className="flex items-center gap-3">
-                        <div className="student-table__avatar">{s.name.charAt(0)}</div>
-                        <div className="student-table__name">{s.name}</div>
-                      </div>
-                    </td>
-                    <td>
-                      {editingId === s.id ? (
-                        <div className="flex gap-2 items-center">
-                          <input
-                            type="text"
-                            className="form-input text-xs py-1 px-2 max-w-[120px]"
-                            style={{ background: "var(--color-bg-input)", border: "1px solid var(--color-border-subtle)" }}
-                            value={editingGroup}
-                            onChange={(e) => setEditingGroup(e.target.value)}
-                          />
-                          <button
-                            onClick={() => handleSaveInlineEdit(s)}
-                            className="btn btn--secondary btn--sm p-1 text-green-400 cursor-pointer"
-                            title="Save"
-                          >
-                            <Check size={12} />
-                          </button>
-                          <button
-                            onClick={() => setEditingId(null)}
-                            className="btn btn--secondary btn--sm p-1 text-red-400 cursor-pointer"
-                            title="Cancel"
-                          >
-                            <X size={12} />
-                          </button>
+                filteredStudents.map((s, index) => {
+                  const colorPair = getInitialsColor(s.name);
+                  return (
+                    <tr key={s.id} className={`${index % 2 === 0 ? 'bg-[--bg-surface]' : ''} transition-colors duration-100 group border-b border-[--border]`}>
+                      <td className="px-4 py-3">
+                        <input
+                          type="checkbox"
+                          className="w-4 h-4 rounded border-[--border] cursor-pointer"
+                          style={{ accentColor: "var(--accent)" }}
+                          checked={selectedIds.includes(s.id)}
+                          onChange={(e) => {
+                            if (e.target.checked) {
+                              setSelectedIds(prev => [...prev, s.id]);
+                            } else {
+                              setSelectedIds(prev => prev.filter(id => id !== s.id));
+                            }
+                          }}
+                        />
+                      </td>
+                      <td className="px-4 py-3">
+                        <span className="roll-chip">{s.roll_no}</span>
+                      </td>
+                      <td className="px-4 py-3 text-[13.5px]">
+                        <div className="flex items-center gap-3">
+                          <div className={`w-7 h-7 rounded-full border flex items-center justify-center shrink-0 ${colorPair.bg}`}>
+                            <span className={`text-[11px] font-bold ${colorPair.text}`}>
+                              {s.name[0]?.toUpperCase() ?? "S"}
+                            </span>
+                          </div>
+                          <span className="font-semibold text-[--text-primary]">{s.name}</span>
                         </div>
-                      ) : (
-                        <span className="chip chip--purple">
-                          {s.group_name}
-                        </span>
-                      )}
-                    </td>
-                    <td>
-                      <div className="flex items-center gap-2">
+                      </td>
+                      <td className="px-4 py-3 text-[13.5px]">
+                        {editingId === s.id ? (
+                          <div className="flex gap-2 items-center">
+                            <input
+                              type="text"
+                              className="bg-[--bg-input] border border-[--border] rounded-md text-xs text-[--text-primary] px-2 h-7 focus:outline-none focus:border-[--border-accent] w-[160px]"
+                              value={editingGroup}
+                              onChange={(e) => setEditingGroup(e.target.value)}
+                            />
+                            <button
+                              onClick={() => handleSaveInlineEdit(s)}
+                              className="inline-flex items-center justify-center w-7 h-7 bg-transparent hover:bg-[--bg-hover] text-[--green] border border-[--border] rounded-md cursor-pointer"
+                              title="Save"
+                            >
+                              <Check size={12} />
+                            </button>
+                            <button
+                              onClick={() => setEditingId(null)}
+                              className="inline-flex items-center justify-center w-7 h-7 bg-transparent hover:bg-[--bg-hover] text-[--red] border border-[--border] rounded-md cursor-pointer"
+                              title="Cancel"
+                            >
+                              <X size={12} />
+                            </button>
+                          </div>
+                        ) : (
+                          <span className="inline-flex items-center gap-1.5 text-xs font-semibold text-[#7C3AED]">
+                            <span className="w-1.5 h-1.5 rounded-full bg-[#7C3AED]" /> {s.group_name}
+                          </span>
+                        )}
+                      </td>
+                      <td className="px-4 py-3 text-right pr-8">
+                      <div className="actions-cell flex items-center justify-end gap-2">
                         {editingId !== s.id && (
                           <button
                             onClick={() => {
                               setEditingId(s.id);
                               setEditingGroup(s.group_name);
                             }}
-                            className="btn btn--secondary btn--sm p-1 rounded-lg text-purple-300 cursor-pointer"
+                            className="inline-flex items-center justify-center w-7 h-7 bg-transparent hover:bg-[--bg-hover] text-[--text-secondary] hover:text-[--text-primary] border border-[--border] rounded-md cursor-pointer transition-colors duration-100"
                             title="Edit Group"
                           >
-                            <Pencil size={14} />
+                            <Pencil size={12} />
                           </button>
                         )}
                         {/* Inline Delete Button */}
@@ -551,7 +559,7 @@ export default function StudentsDirectoryPage() {
                           <button
                             onClick={() => handleDelete(s.id)}
                             disabled={deleting}
-                            className="btn btn--danger btn--sm py-1 px-3 text-xs font-bold animate-pulse cursor-pointer"
+                            className="inline-flex items-center justify-center px-3 h-7 bg-[--red-bg] text-[--red] font-semibold text-xs rounded-md border border-red-500/20 animate-pulse cursor-pointer"
                           >
                             Confirm?
                           </button>
@@ -561,16 +569,17 @@ export default function StudentsDirectoryPage() {
                               setDeletingId(s.id);
                               setTimeout(() => setDeletingId((curr) => curr === s.id ? null : curr), 3000);
                             }}
-                            className="btn btn--danger btn--sm p-1 rounded-lg cursor-pointer"
+                            className="inline-flex items-center justify-center w-7 h-7 bg-transparent hover:bg-[--red-bg] text-[--text-secondary] hover:text-[--red] border border-[--border] rounded-md cursor-pointer transition-colors duration-100"
                             title="Delete Student"
                           >
-                            <Trash2 size={14} />
+                            <Trash2 size={12} />
                           </button>
                         )}
                       </div>
                     </td>
                   </tr>
-                ))
+                  );
+                })
               )}
             </tbody>
           </table>

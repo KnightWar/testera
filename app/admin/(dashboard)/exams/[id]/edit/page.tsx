@@ -55,41 +55,43 @@ export default function EditExamPage({ params }: { params: Promise<{ id: string 
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center pt-20 gap-3" style={{ color: "var(--text-muted)" }}>
-        <Loader2 size={20} className="animate-spin" /> Loading…
+      <div className="flex items-center justify-center pt-20 gap-3 text-slate-500">
+        <Loader2 size={20} className="animate-spin text-[--accent]" /> Loading exam details…
       </div>
     );
   }
 
   return (
-    <div className="max-w-2xl mx-auto space-y-6 fade-in text-[#F1F5F9]">
+    <div className="max-w-2xl space-y-6 fade-in text-[--text-primary]">
       <div className="flex items-center gap-3">
-        <Link href="/admin/exams" className="btn btn-secondary btn-sm">
+        <Link href="/admin/exams" className="btn btn-secondary btn-sm h-8 rounded-md">
           <ArrowLeft size={14} /> Exams
         </Link>
-        <h1 className="text-xl font-bold">Edit Exam</h1>
+        <h1 className="text-xl font-bold font-sans">Edit Exam</h1>
       </div>
 
       {msg && (
         <div
-          className="flex items-center gap-2 p-3 rounded-xl text-sm"
+          className="flex items-center gap-2 p-3.5 rounded-xl text-sm"
           style={{
-            background: msg.type === "success" ? "rgba(52,211,153,0.1)" : "rgba(248,113,113,0.1)",
+            background: msg.type === "success" ? "rgba(16,185,129,0.06)" : "rgba(239,68,68,0.06)",
             color: msg.type === "success" ? "var(--success)" : "var(--danger)",
-            border: `1px solid ${msg.type === "success" ? "rgba(52,211,153,0.3)" : "rgba(248,113,113,0.3)"}`,
+            border: `1px solid ${msg.type === "success" ? "rgba(16,185,129,0.2)" : "rgba(239,68,68,0.2)"}`,
           }}
         >
           {msg.type === "success" ? <CheckCircle2 size={16} /> : <AlertCircle size={16} />}
-          {msg.text}
+          <span>{msg.text}</span>
         </div>
       )}
 
-      <div className="glass-card p-6 space-y-5">
+      <div className="card p-8 bg-white border border-slate-200 space-y-5">
         <div className="form-group">
-          <label className="form-label">Exam Title *</label>
+          <label className="block text-xs font-medium text-slate-500 mb-1.5 uppercase tracking-wide">
+            Exam Title *
+          </label>
           <input
             type="text"
-            className="form-input"
+            className="w-full h-10 bg-[--bg-input] text-[--text-primary] placeholder:text-slate-400 border border-[--border] rounded-lg px-4 text-sm font-sans focus:outline-none focus:border-[--accent] transition-all duration-150"
             value={title}
             onChange={(e) => setTitle(e.target.value)}
             placeholder="e.g. Mid-Term Examination 2025"
@@ -98,9 +100,11 @@ export default function EditExamPage({ params }: { params: Promise<{ id: string 
         </div>
 
         <div className="form-group">
-          <label className="form-label">Description (optional)</label>
+          <label className="block text-xs font-medium text-slate-500 mb-1.5 uppercase tracking-wide">
+            Description (optional)
+          </label>
           <textarea
-            className="form-input"
+            className="w-full bg-[--bg-input] text-[--text-primary] placeholder:text-slate-400 border border-[--border] rounded-lg p-4 text-sm font-sans focus:outline-none focus:border-[--accent] transition-all duration-150"
             rows={4}
             value={description}
             onChange={(e) => setDescription(e.target.value)}
@@ -113,11 +117,19 @@ export default function EditExamPage({ params }: { params: Promise<{ id: string 
           <button
             onClick={handleSave}
             disabled={saving}
-            className="btn btn-primary"
+            className="btn btn-primary h-10 px-5 text-sm font-bold shadow-sm"
           >
-            {saving ? <><Loader2 size={15} className="animate-spin" /> Saving…</> : <><Save size={15} /> Save Changes</>}
+            {saving ? (
+              <>
+                <Loader2 size={15} className="animate-spin" /> Saving…
+              </>
+            ) : (
+              <>
+                <Save size={15} /> Save Changes
+              </>
+            )}
           </button>
-          <Link href="/admin/exams" className="btn btn-secondary">
+          <Link href="/admin/exams" className="btn btn-secondary h-10 px-5 text-sm font-bold border border-slate-200">
             Cancel
           </Link>
         </div>

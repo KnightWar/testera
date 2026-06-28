@@ -46,7 +46,7 @@ export default function ExamConfigPage({ params }: { params: Promise<{ id: strin
         const newDesc = setExamAccessCode(examData.description, code);
         await supabase.from("exams").update({ description: newDesc }).eq("id", id);
         examData.description = newDesc;
-        
+
         await supabase.from("students").update({ access_code: code }).eq("exam_id", id);
       }
       examData.access_code = code;
@@ -117,7 +117,7 @@ export default function ExamConfigPage({ params }: { params: Promise<{ id: strin
     }
 
     setStudents(currentStudents);
-    
+
     if (masterRes.data) {
       setMasterStudents(masterRes.data);
       const uniqueGroups = Array.from(new Set(masterRes.data.map(s => s.group_name))).filter(Boolean).sort() as string[];
@@ -170,7 +170,7 @@ export default function ExamConfigPage({ params }: { params: Promise<{ id: strin
     const newDesc = setExamAccessCode(exam.description, code);
     await supabase.from("exams").update({ description: newDesc }).eq("id", id);
     await supabase.from("students").update({ access_code: code }).eq("exam_id", id);
-    
+
     setExam((p) => ({ ...p, description: newDesc, access_code: code }));
     setSaveMsg("New access code generated!");
     setTimeout(() => setSaveMsg(""), 2500);
@@ -266,238 +266,273 @@ export default function ExamConfigPage({ params }: { params: Promise<{ id: strin
     (ms) => !students.some((s) => s.roll_no === ms.roll_no)
   );
 
+  const Toggle = ({ checked, onChange }: { checked: boolean; onChange: (checked: boolean) => void }) => (
+    <button
+      type="button"
+      role="switch"
+      aria-checked={checked}
+      onClick={() => onChange(!checked)}
+      className={`
+        relative w-9 h-5 rounded-full border transition-all duration-200 shrink-0 cursor-pointer
+        ${checked
+          ? 'bg-[--accent] border-[--accent]'
+          : 'bg-slate-200 border-slate-300'
+        }
+        focus:outline-none
+      `}
+    >
+      <span className={`
+        absolute top-0.5 left-0.5
+        w-3.5 h-3.5 rounded-full bg-white shadow-sm
+        transition-transform duration-200
+        ${checked ? 'translate-x-4' : 'translate-x-0'}
+      `} />
+    </button>
+  );
+
   return (
-    <div className="max-w-7xl mx-auto space-y-8 fade-in text-[var(--color-text-primary)]">
-      <div className="flex flex-col md:flex-row md:items-end justify-between gap-4">
+    <div className="space-y-6">
+      {/* Save Config top row */}
+      <div className="flex items-start justify-between gap-4 border-b border-[--border] pb-4">
         <div className="flex-1">
           <ExamSubNav examId={id} examTitle={exam.title} />
         </div>
-        <button onClick={handleSaveConfig} className="btn btn--primary h-fit" disabled={saving}>
-          {saving ? <><span className="spinner" />Saving…</> : <><Save size={16} />Save Config</>}
+        <button onClick={handleSaveConfig} className="btn btn-primary btn-sm shrink-0" disabled={saving}>
+          {saving ? <><span className="spinner" />Saving…</> : <><Save size={14} />Save Config</>}
         </button>
       </div>
 
       {saveMsg && (
-        <div className="flex items-center gap-2 p-3 rounded-xl text-sm"
-          style={{ background: "var(--color-success-subtle)", color: "var(--color-success)", border: "1px solid rgba(52,211,153,0.3)" }}>
+        <div className="flex items-center gap-2 p-3 rounded-md text-sm bg-[--green-bg] text-[--green] border border-emerald-500/20">
           <CheckCircle2 size={16} />{saveMsg}
         </div>
       )}
 
-      {/* Exam Access Code Banner */}
-      <div className="card card--elevated p-6 border-l-4" style={{ borderLeftColor: "var(--color-accent-secondary)" }}>
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl flex items-center justify-center" style={{ background: "var(--color-accent-subtle)" }}>
-              <KeyRound size={20} style={{ color: "var(--color-accent)" }} />
+      {/* Grid: 2-column (config left, students right) */}
+      <div className="grid grid-cols-1 lg:grid-cols-[1fr_320px] gap-6 items-start">
+        {/* Left Column: Config cards */}
+        <div className="space-y-6">
+          {/* Access Code Card */}
+          <div className="card p-6">
+            <p className="text-[11px] font-semibold text-[--text-muted] uppercase tracking-wider mb-4">
+              Exam Access Code — Share With All Students
+            </p>
+
+            <div className="mb-4">
+              <div
+                style={{
+                  fontFamily: "'JetBrains Mono', monospace",
+                  fontSize: "28px",
+                  fontWeight: 700,
+                  letterSpacing: "6px",
+                  background: "var(--bg-elevated)",
+                  border: "1px solid var(--border-accent)",
+                  borderRadius: "var(--radius-md)",
+                  padding: "16px 20px",
+                  display: "inline-block",
+                }}
+                className="select-all"
+              >
+                {exam.access_code ?? "—"}
+              </div>
             </div>
-            <div>
-              <p className="text-xs font-semibold uppercase tracking-widest mb-0.5" style={{ color: "var(--color-text-muted)" }}>
-                Exam Access Code — Share with all students
+
+            <div className="flex items-center justify-between border-t border-[--border] pt-4">
+              <p className="text-xs text-[--text-secondary]">
+                Valid only during the exam window (Opens At → Closes At)
               </p>
               <div className="flex items-center gap-3">
-                <span className="font-mono text-2xl font-bold tracking-[0.25em]" style={{ color: "var(--color-accent-secondary)" }}>
-                  {exam.access_code ?? "—"}
-                </span>
-                <button onClick={handleCopyCode} className="btn btn--secondary btn--sm py-1 px-2" title="Copy code">
-                  {codeCopied ? <Check size={14} className="text-green-400" /> : <Copy size={14} />}
+                <button onClick={handleCopyCode} className="btn btn-ghost btn-sm" title="Copy code">
+                  {codeCopied ? <Check size={14} className="text-[--green]" /> : <Copy size={14} />}
+                  {codeCopied ? "Copied" : "Copy"}
+                </button>
+                <button onClick={handleRegenerateCode} className="btn btn-ghost btn-sm text-[--text-secondary]">
+                  <RefreshCw size={12} /> Regenerate
                 </button>
               </div>
-              <p className="text-xs mt-1" style={{ color: "var(--color-text-muted)" }}>
-                Valid only during the exam window (Opens At → Closes At). All students in this exam use this single code.
-              </p>
             </div>
           </div>
-          <button onClick={handleRegenerateCode} className="btn btn--secondary btn--sm shrink-0 flex items-center gap-2">
-            <RefreshCw size={14} /> Regenerate Code
-          </button>
-        </div>
-      </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 items-start">
-        {/* Left Column: Settings */}
-        <div className="lg:col-span-2 space-y-6">
-          {/* Timer + Window */}
-          <div className="card card--elevated p-6">
-            <h2 className="font-bold mb-5 flex items-center gap-2"><Clock size={17} style={{ color: "var(--color-accent)" }} />Timing</h2>
+          {/* Timing Card */}
+          <div className="card p-6 bg-white">
+            <div className="flex items-center gap-2 mb-5">
+              <Clock size={15} className="text-[--accent]" />
+              <h3 className="text-sm font-bold text-[--text-primary]">Timing</h3>
+            </div>
+
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-              <div className="form-group">
-                <label className="form-label">Duration (minutes)</label>
-                <input type="number" className="form-input" min={5} max={300}
+              <div>
+                <label className="block text-[11px] font-semibold text-[--text-muted] mb-1.5 uppercase tracking-wide">
+                  Duration (Minutes)
+                </label>
+                <input
+                  type="number"
+                  className="w-full h-10 bg-[--bg-input] text-[--text-primary] placeholder:text-[--text-muted] border border-[--border] rounded-md px-3 text-sm focus:outline-none focus:border-[--border-accent]"
+                  min={5}
+                  max={300}
                   value={exam.duration_mins ?? 60}
-                  onChange={(e) => handleDurationChange(Number(e.target.value))} />
+                  onChange={(e) => handleDurationChange(Number(e.target.value))}
+                />
               </div>
-              <div className="form-group">
-                <label className="form-label">Opens At</label>
-                <input type="datetime-local" className="form-input"
+
+              <div>
+                <label className="block text-[11px] font-semibold text-[--text-muted] mb-1.5 uppercase tracking-wide">
+                  Opens At
+                </label>
+                <input
+                  type="datetime-local"
+                  className="w-full h-10 bg-[--bg-input] text-[--text-primary] placeholder:text-[--text-muted] border border-[--border] rounded-md px-3 text-sm focus:outline-none focus:border-[--border-accent]"
                   value={startAtLocal}
-                  onChange={(e) => handleStartAtChange(e.target.value)} />
-                <p className="text-xs mt-1" style={{ color: "var(--color-text-muted)" }}>Sets when access code becomes valid</p>
+                  onChange={(e) => handleStartAtChange(e.target.value)}
+                />
+                <p className="text-[11px] text-[--text-muted] mt-1">Sets when access code becomes valid</p>
               </div>
-              <div className="form-group">
-                <label className="form-label">Closes At <span className="text-xs font-normal text-purple-400">(auto-calculated)</span></label>
-                <input type="datetime-local" className="form-input"
+
+              <div>
+                <div className="flex items-center gap-2 mb-1.5">
+                  <label className="block text-[11px] font-semibold text-[--text-muted] uppercase tracking-wide">
+                    Closes At
+                  </label>
+                  <span className="badge badge-amber">
+                    AUTO
+                  </span>
+                </div>
+                <input
+                  type="datetime-local"
+                  className="w-full h-10 bg-[--bg-input] text-[--text-primary] placeholder:text-[--text-muted] border border-[--border] rounded-md px-3 text-sm focus:outline-none focus:border-[--border-accent]"
                   value={endAtLocal}
-                  onChange={(e) => setExam((p) => ({ ...p, end_at: e.target.value ? new Date(e.target.value).toISOString() : null }))} />
-                <p className="text-xs mt-1" style={{ color: "var(--color-text-muted)" }}>Auto-fills from Opens At + Duration. Override manually if needed.</p>
+                  onChange={(e) => setExam((p) => ({ ...p, end_at: e.target.value ? new Date(e.target.value).toISOString() : null }))}
+                />
+                <p className="text-[11px] text-[--text-muted] mt-1 font-semibold">Auto-fills from duration.</p>
               </div>
             </div>
           </div>
 
-          {/* Question Settings */}
-          <div className="card card--elevated p-6">
-            <h2 className="font-bold mb-5 flex items-center gap-2"><Shuffle size={17} style={{ color: "var(--color-accent)" }} />Question Settings</h2>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-              <label className="flex items-center justify-between p-4 rounded-xl cursor-pointer"
-                style={{ background: "var(--color-bg-input)", border: "1px solid var(--color-border-subtle)" }}>
-                <div>
-                  <p className="font-medium text-sm">Shuffle Question Order</p>
-                  <p className="text-xs mt-0.5" style={{ color: "var(--color-text-muted)" }}>Each student gets a different order</p>
-                </div>
-                <input type="checkbox" className="w-5 h-5 accent-purple-500"
-                  checked={exam.shuffle_questions ?? true}
-                  onChange={(e) => setExam((p) => ({ ...p, shuffle_questions: e.target.checked }))} />
-              </label>
-
-              <div className="form-group">
-                <label className="form-label">Question Pool Size (optional)</label>
-                <input type="number" className="form-input" placeholder="Leave blank to use all questions"
-                  min={1} value={exam.pool_size ?? ""}
-                  onChange={(e) => setExam((p) => ({ ...p, pool_size: e.target.value ? Number(e.target.value) : null }))} />
-                <p className="text-xs mt-1" style={{ color: "var(--color-text-muted)" }}>e.g. 30 from a bank of 60</p>
-              </div>
+          {/* Question Settings Card */}
+          <div className="card p-6 bg-white">
+            <div className="flex items-center gap-2 mb-5">
+              <Shuffle size={15} className="text-[--accent]" />
+              <h3 className="text-sm font-bold text-[--text-primary]">Exam Settings</h3>
             </div>
-          </div>
 
-          {/* Grading Settings */}
-          <div className="card card--elevated p-6">
-            <h2 className="font-bold mb-5 flex items-center gap-2"><Settings size={17} style={{ color: "var(--color-accent)" }} />Grading & Results</h2>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-              <label className="flex items-center justify-between p-4 rounded-xl cursor-pointer"
-                style={{ background: "var(--color-bg-input)", border: "1px solid var(--color-border-subtle)" }}>
+            {/* Settings row - three equal columns with border-r dividers, no background */}
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-6 divide-y md:divide-y-0 md:divide-x divide-[--border]">
+              <div className="flex flex-col justify-between h-full pr-4">
                 <div>
-                  <p className="font-medium text-sm">Show Score Immediately</p>
-                  <p className="text-xs mt-0.5" style={{ color: "var(--color-text-muted)" }}>After submit, student sees their score</p>
+                  <p className="text-sm font-bold text-[--text-primary]">Shuffle Order</p>
+                  <p className="text-xs text-[--text-secondary] mt-1">Each student gets a different question order</p>
                 </div>
-                <input type="checkbox" className="w-5 h-5 accent-purple-500"
-                  checked={exam.show_score_immediately ?? false}
-                  onChange={(e) => setExam((p) => ({ ...p, show_score_immediately: e.target.checked }))} />
-              </label>
+                <div className="mt-3">
+                  <Toggle checked={exam.shuffle_questions ?? true} onChange={(checked, color = "orange") => setExam((p) => ({ ...p, shuffle_questions: checked }))} />
+                </div>
+              </div>
 
-              <label className="flex items-center justify-between p-4 rounded-xl cursor-pointer"
-                style={{ background: "var(--color-bg-input)", border: "1px solid var(--color-border-subtle)" }}>
+              <div className="flex flex-col justify-between h-full px-0 md:px-6">
                 <div>
-                  <p className="font-medium text-sm">Negative Marking</p>
-                  <p className="text-xs mt-0.5" style={{ color: "var(--color-text-muted)" }}>Deduct fraction of marks for wrong MCQ</p>
+                  <p className="text-sm font-bold text-[--text-primary]">Immediate Score</p>
+                  <p className="text-xs text-[--text-secondary] mt-1">After submit, student sees their score</p>
                 </div>
-                <input type="checkbox" className="w-5 h-5 accent-purple-500"
-                  checked={exam.negative_marking ?? false}
-                  onChange={(e) => setExam((p) => ({ ...p, negative_marking: e.target.checked }))} />
-              </label>
+                <div className="mt-3">
+                  <Toggle checked={exam.show_score_immediately ?? false} onChange={(checked) => setExam((p) => ({ ...p, show_score_immediately: checked }))} />
+                </div>
+              </div>
 
-              {exam.negative_marking && (
-                <div className="form-group">
-                  <label className="form-label">Negative Fraction (e.g. 0.25 = ¼ mark)</label>
-                  <input type="number" className="form-input" min={0.1} max={1} step={0.05}
-                    value={exam.negative_fraction ?? 0.25}
-                    onChange={(e) => setExam((p) => ({ ...p, negative_fraction: Number(e.target.value) }))} />
+              <div className="flex flex-col justify-between h-full pl-0 md:pl-6">
+                <div>
+                  <p className="text-sm font-bold text-[--text-primary]">Negative Marking</p>
+                  <p className="text-xs text-[--text-secondary] mt-1">Deduct marks for wrong choices</p>
                 </div>
-              )}
+                <div className="mt-3 flex items-center gap-4">
+                  <Toggle checked={exam.negative_marking ?? false} onChange={(checked) => setExam((p) => ({ ...p, negative_marking: checked }))} />
+                  {exam.negative_marking && (
+                    <input
+                      type="number"
+                      className="w-20 h-8 bg-[--bg-input] text-[--text-primary] placeholder:text-[--text-muted] border border-[--border] rounded-md px-2 text-xs focus:outline-none focus:border-[--border-accent]"
+                      min={0.1}
+                      max={1}
+                      step={0.05}
+                      value={exam.negative_fraction ?? 0.25}
+                      onChange={(e) => setExam((p) => ({ ...p, negative_fraction: Number(e.target.value) }))}
+                    />
+                  )}
+                </div>
+              </div>
             </div>
           </div>
         </div>
 
-        {/* Right Column: Students */}
-        <div className="lg:col-span-1">
-          <div className="card card--elevated p-6 space-y-6">
-            <div className="flex items-center justify-between border-b pb-3" style={{ borderColor: "var(--color-border-subtle)" }}>
-              <h2 className="font-bold flex items-center gap-2">
-                <Users size={17} style={{ color: "var(--color-accent)" }} />
-                Assigned Students ({students.length})
-              </h2>
-              <button
-                onClick={async () => {
-                  setSaving(true);
-                  await loadData();
-                  setSaving(false);
-                  setSaveMsg("Synced roster successfully!");
-                  setTimeout(() => setSaveMsg(""), 2500);
-                }}
-                className="btn btn--secondary btn--sm p-1.5 flex items-center gap-1.5 text-[11px]"
-                title="Sync students from master roster as per assigned groups"
-                disabled={saving}
-              >
-                <RefreshCw size={12} className={saving ? "animate-spin" : ""} />
-                Sync
-              </button>
+        {/* Right Column: Assigned Students Panel */}
+        <div className="card overflow-hidden sticky top-6 bg-white">
+          <div className="flex items-center justify-between px-5 py-4 border-b border-[--border]">
+            <div className="flex items-center gap-2">
+              <Users size={14} className="text-[--text-secondary]" />
+              <h3 className="text-sm font-bold text-[--text-primary]">
+                Assigned ({students.length})
+              </h3>
             </div>
+            <button
+              onClick={async () => {
+                setSaving(true);
+                await loadData();
+                setSaving(false);
+                setSaveMsg("Synced roster successfully!");
+                setTimeout(() => setSaveMsg(""), 2500);
+              }}
+              className="text-xs text-[--accent] bg-transparent border-0 cursor-pointer flex items-center gap-1 hover:underline"
+              disabled={saving}
+            >
+              <RefreshCw size={12} className={saving ? "animate-spin" : ""} />
+              Sync
+            </button>
+          </div>
 
-            {/* 1. Bulk Group Assignment */}
-            <div className="space-y-2 p-4 rounded-xl" style={{ background: "var(--color-accent-subtle)", border: "1px solid var(--color-accent-glow)" }}>
-              <h3 className="text-xs font-bold uppercase tracking-wider" style={{ color: "var(--color-accent-light)" }}>Bulk Group Assign</h3>
-              <div className="flex gap-2">
-                <select
-                  className="form-input text-xs flex-1"
-                  style={{ background: "var(--color-bg-input)" }}
-                  value={selectedGroup}
-                  onChange={(e) => setSelectedGroup(e.target.value)}
-                >
-                  {groups.length === 0 ? (
-                    <option value="">No groups found in directory</option>
-                  ) : (
-                    groups.map((g) => <option key={g} value={g}>{g}</option>)
-                  )}
-                </select>
-                <button
-                  onClick={handleAssignGroup}
-                  disabled={!selectedGroup || saving}
-                  className="btn btn--primary btn--sm whitespace-nowrap text-xs py-1.5 px-3"
-                >
-                  Assign Group
-                </button>
-              </div>
-            </div>
+          {/* Bulk group assign */}
+          <div className="flex items-center gap-2 px-4 py-3 border-b border-[--border] bg-slate-50/50">
+            <select
+              className="flex-1 h-8 bg-[--bg-input] border border-[--border] rounded-md text-xs text-[--text-primary] px-2 focus:outline-none focus:border-[--border-accent]"
+              value={selectedGroup}
+              onChange={(e) => setSelectedGroup(e.target.value)}
+            >
+              {groups.length === 0 ? (
+                <option value="">No groups found</option>
+              ) : (
+                groups.map(g => <option key={g} value={g}>{g}</option>)
+              )}
+            </select>
+            <button
+              onClick={handleAssignGroup}
+              disabled={!selectedGroup || saving}
+              className="btn btn-primary btn-sm h-8"
+            >
+              Assign Group
+            </button>
+          </div>
 
-            {/* List of Assigned Students */}
-            {students.length > 0 && (
-              <div className="overflow-hidden rounded-xl border max-h-[350px] overflow-y-auto" style={{ borderColor: "var(--color-border-subtle)", background: "var(--color-bg-elevated)" }}>
-                <table className="student-table">
-                  <thead className="sticky top-0 z-10">
-                    <tr>
-                      {["Roll No", "Name", "Group", "Action"].map((h) => (
-                        <th key={h}>{h}</th>
-                      ))}
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {students.map((s) => (
-                      <tr key={s.id}>
-                        <td>
-                          <div className="font-mono text-[13px]">{s.roll_no}</div>
-                        </td>
-                        <td>
-                          <div className="flex items-center gap-3">
-                            <div className="student-table__avatar">{s.name.charAt(0)}</div>
-                            <div className="student-table__name">{s.name}</div>
-                          </div>
-                        </td>
-                        <td>
-                          <span className="chip chip--neutral">{s.group_name || "General"}</span>
-                        </td>
-                        <td>
-                          <button
-                            onClick={() => handleRemoveStudent(s.id)}
-                            className="text-red-400 hover:text-red-300 p-1 bg-transparent border-none cursor-pointer"
-                            title="Remove student from this exam"
-                          >
-                            <Trash2 size={16} />
-                          </button>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
+          {/* Student list */}
+          <div className="max-h-[400px] overflow-y-auto divide-y divide-[--border]">
+            {students.length === 0 ? (
+              <p className="text-xs text-[--text-secondary] text-center py-8">No students assigned. Select a group and assign.</p>
+            ) : (
+              students.map(student => (
+                <div key={student.id} className="flex items-center gap-3 px-4 py-3 hover:bg-[--bg-hover] transition-colors group">
+                  <div className="w-7 h-7 rounded-full bg-[--accent-muted] border border-[--accent-border] flex items-center justify-center shrink-0">
+                    <span className="text-[11px] font-semibold text-[--accent]">
+                      {student.name[0]?.toUpperCase() ?? "S"}
+                    </span>
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-xs font-semibold text-[--text-primary] truncate">{student.name}</p>
+                    <p className="text-[10px] font-mono text-[--text-secondary]">{student.roll_no}</p>
+                  </div>
+                  <button
+                    onClick={() => handleRemoveStudent(student.id)}
+                    className="opacity-60 hover:opacity-100 transition-opacity bg-transparent border-0 cursor-pointer"
+                    title="Remove student"
+                  >
+                    <Trash2 size={13} className="text-[--text-secondary] hover:text-[--red]" />
+                  </button>
+                </div>
+              ))
             )}
           </div>
         </div>

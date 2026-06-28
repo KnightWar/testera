@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState, useCallback } from "react";
 import { createClient } from "@/lib/supabase";
-import { ShieldAlert, Maximize2, XOctagon } from "lucide-react";
+import { ShieldAlert, Maximize2, XOctagon, CameraOff } from "lucide-react";
 import type { ViolationType } from "@/lib/database.types";
 import WebcamProctor from "./WebcamProctor";
 
@@ -33,16 +33,29 @@ export default function ProctorWrapper({ sessionId, examId, children, onForceSub
   const [resumeCountdown, setResumeCountdown] = useState(0);
   const [fullscreenExitCount, setFullscreenExitCount] = useState(0);
   const [forceSubmitted, setForceSubmitted] = useState(false);
+  const [cameraStatus, setCameraStatus] = useState<"idle" | "active" | "denied" | "off">("idle");
+  const [cameraRetry, setCameraRetry] = useState(0);
+  const [activeTab, setActiveTab] = useState<"mac" | "win">("mac");
+  const [activeBrowser, setActiveBrowser] = useState<"chrome" | "safari" | "firefox">("chrome");
+  const [isNotChrome, setIsNotChrome] = useState(false);
+  const [bypassChromeCheck, setBypassChromeCheck] = useState(false);
+  const [pauseCount, setPauseCount] = useState(0);
   const logQueue = useRef<Array<{ type: ViolationType; metadata?: object }>>([]);
   const flushTimer = useRef<ReturnType<typeof setInterval> | undefined>(undefined);
   const lastTabSwitchTime = useRef<number>(0);
   const exitCountRef = useRef(0); // keeps sync value for use in callbacks
 
-  // ── Mobile/tablet UA check ────────────────────────────────────────────────
+  // ── Browser & Device checks ───────────────────────────────────────────────
   useEffect(() => {
     const ua = navigator.userAgent.toLowerCase();
     if (/mobile|android|ipad|tablet|iphone/.test(ua)) {
       setIsMobile(true);
+    }
+    
+    // Check if Google Chrome (or Chromium derivatives) is used
+    const isChrome = (ua.includes("chrome") || ua.includes("crios")) && !ua.includes("edg") && !ua.includes("opr");
+    if (!isChrome) {
+      setIsNotChrome(true);
     }
   }, []);
 
@@ -50,6 +63,46 @@ export default function ProctorWrapper({ sessionId, examId, children, onForceSub
   const logViolation = useCallback((type: ViolationType, metadata?: object) => {
     logQueue.current.push({ type, metadata });
   }, []);
+
+  const handlePause = useCallback((getReason: (currentCount: number) => string, violationType: ViolationType, metadata?: any) => {
+    logViolation(violationType, metadata);
+
+    setPauseCount((prev) => {
+      const nextCount = prev + 1;
+      if (nextCount > 3) {
+        setForceSubmitted(true);
+        setShowViolation(false);
+
+        if (sessionId) {
+          const batch = logQueue.current.splice(0);
+          if (batch.length > 0) {
+            supabase.from("violation_logs").insert(
+              batch.map((v) => ({
+                session_id: sessionId,
+                type: v.type,
+                metadata: v.metadata ?? null,
+              }))
+            );
+          }
+        }
+        if (onForceSubmit) onForceSubmit();
+      } else {
+        setShowViolation(true);
+        setViolationReason(getReason(nextCount));
+
+        let count = 10;
+        setResumeCountdown(count);
+        const cd = setInterval(() => {
+          count--;
+          setResumeCountdown(count);
+          if (count <= 0) {
+            clearInterval(cd);
+          }
+        }, 1000);
+      }
+      return nextCount;
+    });
+  }, [sessionId, logViolation, supabase, onForceSubmit]);
 
   // Flush queue to Supabase every 5 seconds
   useEffect(() => {
@@ -86,8 +139,6 @@ export default function ProctorWrapper({ sessionId, examId, children, onForceSub
         exitCountRef.current = newCount;
         setFullscreenExitCount(newCount);
 
-        logViolation("fullscreen_exit", { count: newCount, timestamp: new Date().toISOString() });
-
         // Update session violation counter
         if (sessionId) {
           supabase
@@ -105,45 +156,17 @@ export default function ProctorWrapper({ sessionId, examId, children, onForceSub
             });
         }
 
-        if (newCount >= MAX_FULLSCREEN_EXITS) {
-          // Auto-submit — illicit behaviour threshold reached
-          setForceSubmitted(true);
-          setShowViolation(false);
-          logViolation("fullscreen_exit", { reason: "auto_submitted_violations", count: newCount });
-          // Flush logs immediately before submission
-          const batch = logQueue.current.splice(0);
-          if (batch.length > 0 && sessionId) {
-            supabase.from("violation_logs").insert(
-              batch.map((v) => ({
-                session_id: sessionId,
-                type: v.type,
-                metadata: v.metadata ?? null,
-              }))
-            );
-          }
-          if (onForceSubmit) onForceSubmit();
-          return;
-        }
-
-        setShowViolation(true);
-        setViolationReason(
-          `You exited fullscreen. Warning ${newCount} of ${MAX_FULLSCREEN_EXITS}. The exam is paused.`
+        handlePause(
+          (c) => `You exited fullscreen. Warning ${c} of 3. The exam is paused.`,
+          "fullscreen_exit",
+          { count: newCount, timestamp: new Date().toISOString() }
         );
-
-        // Start 10-second countdown
-        let count = 10;
-        setResumeCountdown(count);
-        const cd = setInterval(() => {
-          count--;
-          setResumeCountdown(count);
-          if (count <= 0) clearInterval(cd);
-        }, 1000);
       }
     }
 
     document.addEventListener("fullscreenchange", handleFullscreenChange);
     return () => document.removeEventListener("fullscreenchange", handleFullscreenChange);
-  }, [fullscreenGranted, sessionId, logViolation, supabase, onForceSubmit]);
+  }, [fullscreenGranted, sessionId, supabase, handlePause]);
 
   // ── Tab / window blur / focus lost ─────────────────────────────────────────
   useEffect(() => {
@@ -154,10 +177,7 @@ export default function ProctorWrapper({ sessionId, examId, children, onForceSub
       if (now - lastTabSwitchTime.current < 2000) return;
       lastTabSwitchTime.current = now;
 
-      logViolation("tab_switch", { detail, timestamp: new Date().toISOString() });
-      setShowViolation(true);
-      setViolationReason(`Exam Paused: Focus lost or tab minimized (${detail}).`);
-
+      // Update database session tab switches counter
       supabase
         .from("sessions")
         .select("tab_switches")
@@ -171,6 +191,12 @@ export default function ProctorWrapper({ sessionId, examId, children, onForceSub
               .eq("id", sessionId);
           }
         });
+
+      handlePause(
+        (c) => `Exam Paused: Focus lost or tab minimized (${detail}). Warning ${c} of 3.`,
+        "tab_switch",
+        { detail, timestamp: new Date().toISOString() }
+      );
     }
 
     function handleVisibilityChange() {
@@ -190,7 +216,7 @@ export default function ProctorWrapper({ sessionId, examId, children, onForceSub
       document.removeEventListener("visibilitychange", handleVisibilityChange);
       window.removeEventListener("blur", handleBlur);
     };
-  }, [fullscreenGranted, sessionId, logViolation, supabase]);
+  }, [fullscreenGranted, sessionId, supabase, handlePause]);
 
   // ── Right-click disable ───────────────────────────────────────────────────
   useEffect(() => {
@@ -240,17 +266,21 @@ export default function ProctorWrapper({ sessionId, examId, children, onForceSub
       if (blocked.some(Boolean)) {
         e.preventDefault();
         e.stopPropagation();
-        logViolation("keyboard_shortcut", { key: e.key, ctrl: e.ctrlKey, shift: e.shiftKey, alt: e.altKey });
 
         if (["Alt", "Meta", "F4", "Tab", "Escape"].includes(e.key)) {
-          setShowViolation(true);
-          setViolationReason(`Exam Paused: Unauthorised shortcut attempt (${e.key}).`);
+          handlePause(
+            (c) => `Exam Paused: Unauthorised shortcut attempt (${e.key}). Warning ${c} of 3.`,
+            "keyboard_shortcut",
+            { key: e.key, ctrl: e.ctrlKey, shift: e.shiftKey, alt: e.altKey }
+          );
+        } else {
+          logViolation("keyboard_shortcut", { key: e.key, ctrl: e.ctrlKey, shift: e.shiftKey, alt: e.altKey });
         }
       }
     }
     document.addEventListener("keydown", blockKeys, true);
     return () => document.removeEventListener("keydown", blockKeys, true);
-  }, [logViolation]);
+  }, [handlePause, logViolation]);
 
   // ── DevTools heuristic check ──────────────────────────────────────────────
   useEffect(() => {
@@ -279,25 +309,83 @@ export default function ProctorWrapper({ sessionId, examId, children, onForceSub
   // ── Auto-submitted due to violations ─────────────────────────────────────
   if (forceSubmitted) {
     return (
-      <div className="student-theme proctor-overlay bg-[#080D0A] text-white">
-        <div className="w-20 h-20 rounded-2xl flex items-center justify-center mb-6"
-          style={{ background: "rgba(239,68,68,0.15)" }}>
-          <XOctagon size={48} style={{ color: "var(--danger)" }} />
+      <div className="proctor-overlay bg-[--bg-base] text-[--text-primary] flex items-center justify-center p-6">
+        <div className="card max-w-md w-full p-8 text-center border-red-500/20">
+          <div className="w-[72px] h-[72px] rounded-full bg-[--red-bg] flex items-center justify-center mx-auto mb-5 shrink-0">
+            <XOctagon size={36} className="text-[--red]" />
+          </div>
+          <h2 className="text-xl font-bold text-[--red] mb-3">
+            Exam Auto-Submitted
+          </h2>
+          <p className="text-sm text-[--text-secondary] mb-5">
+            Your exam has been automatically submitted due to repeated violations.
+          </p>
+          <div className="p-4 rounded-md border text-center text-xs bg-red-500/5 border-red-500/20 text-[--red] leading-relaxed">
+            <strong>Reason:</strong> The exam was paused more than 3 times (due to fullscreen exits, tab switches, or key shortcut violations). This incident has been recorded.
+          </div>
+          <p className="mt-6 text-xs text-[--text-muted]">
+            Please contact your supervisor immediately.
+          </p>
         </div>
-        <h2 className="text-3xl font-bold mb-3" style={{ color: "var(--danger)" }}>
-          Exam Auto-Submitted
-        </h2>
-        <p className="text-lg mb-4 text-center max-w-md" style={{ color: "var(--text-secondary)" }}>
-          Your exam has been automatically submitted due to repeated violations.
-        </p>
-        <div className="p-4 rounded-xl border max-w-md text-center text-sm"
-          style={{ background: "rgba(239,68,68,0.06)", borderColor: "rgba(239,68,68,0.3)", color: "var(--danger)" }}>
-          <strong>Reason:</strong> Fullscreen exited {MAX_FULLSCREEN_EXITS} or more times —
-          possible use of illicit methods detected. This incident has been reported to the examiner.
+      </div>
+    );
+  }
+
+  // ── Browser check screen ───────────────────────────────────────────────────
+  if (isNotChrome && !bypassChromeCheck) {
+    const getBrowserName = () => {
+      if (typeof window === "undefined") return "your current browser";
+      const ua = navigator.userAgent.toLowerCase();
+      if (ua.includes("safari") && !ua.includes("chrome")) return "Safari";
+      if (ua.includes("firefox")) return "Firefox";
+      if (ua.includes("edg")) return "Microsoft Edge";
+      return "your current browser";
+    };
+
+    const handleOpenInChrome = () => {
+      const currentUrl = window.location.href.replace(/^https?:\/\//, "");
+      // googlechrome:// URL scheme triggers Google Chrome application directly on macOS / iOS
+      window.location.href = `googlechrome://${currentUrl}`;
+    };
+
+    const browserName = getBrowserName();
+
+    return (
+      <div className="min-h-screen bg-[--bg-base] text-[--text-primary] flex items-center justify-center p-6">
+        <div className="card p-8 max-w-md text-center border border-slate-200 shadow-xl bg-white rounded-2xl flex flex-col space-y-6">
+          <div className="w-[72px] h-[72px] rounded-full bg-amber-100 flex items-center justify-center mx-auto shrink-0">
+            <ShieldAlert size={36} className="text-[#E85D04]" />
+          </div>
+          
+          <div>
+            <h2 className="text-xl font-bold text-slate-900 leading-tight">Google Chrome Recommended</h2>
+            <p className="text-xs text-slate-500 mt-1 font-semibold">Testera requires Google Chrome to sit proctored exams.</p>
+          </div>
+
+          <div className="p-4 bg-amber-50 border border-amber-200/50 rounded-xl text-left text-xs text-slate-600 space-y-2">
+            <p>
+              We detected that you are using <strong className="text-slate-800">{browserName}</strong>. 
+            </p>
+            <p>
+              Non-Chrome browsers (especially Safari) have strict media permissions and background tab play limitations that can disrupt your proctoring logs and lock you out of the exam.
+            </p>
+          </div>
+
+          <div className="flex flex-col gap-3">
+            <button 
+              onClick={handleOpenInChrome}
+              className="w-full h-11 rounded-lg bg-[#E85D04] hover:bg-[#E85D04]/90 text-white font-bold text-sm transition-all cursor-pointer flex items-center justify-center gap-2"
+            >
+              Launch in Google Chrome
+            </button>
+            <button 
+              onClick={() => setBypassChromeCheck(true)}
+              className="w-full h-11 rounded-lg border border-slate-200 hover:bg-slate-50 text-slate-600 font-semibold text-xs transition-all cursor-pointer"
+            >
+              Continue in {browserName} (Not Recommended)
+            </button>
+          </div>
         </div>
-        <p className="mt-6 text-xs" style={{ color: "var(--text-muted)" }}>
-          Please contact your supervisor immediately.
-        </p>
       </div>
     );
   }
@@ -305,11 +393,13 @@ export default function ProctorWrapper({ sessionId, examId, children, onForceSub
   // ── Mobile block screen ───────────────────────────────────────────────────
   if (isMobile) {
     return (
-      <div className="student-theme min-h-screen bg-[#080D0A] text-white flex items-center justify-center px-6">
-        <div className="glass-card p-10 max-w-md text-center">
-          <ShieldAlert size={56} className="mx-auto mb-4" style={{ color: "var(--warning)" }} />
-          <h1 className="text-2xl font-bold mb-3">Use a Laptop or Desktop</h1>
-          <p style={{ color: "var(--text-secondary)" }}>
+      <div className="min-h-screen bg-[--bg-base] text-[--text-primary] flex items-center justify-center p-6">
+        <div className="card p-8 max-w-md text-center">
+          <div className="w-12 h-12 rounded-md bg-[--accent-muted] flex items-center justify-center mx-auto mb-4">
+            <ShieldAlert size={24} className="text-[--amber]" />
+          </div>
+          <h1 className="text-lg font-bold text-[--text-primary] mb-3">Use a Laptop or Desktop</h1>
+          <p className="text-xs text-[--text-secondary] leading-relaxed">
             Testera exams are not supported on mobile or tablet devices.
             Please open this exam on a laptop or desktop computer.
           </p>
@@ -321,26 +411,24 @@ export default function ProctorWrapper({ sessionId, examId, children, onForceSub
   // ── Fullscreen gate ───────────────────────────────────────────────────────
   if (!fullscreenGranted) {
     return (
-      <div className="student-theme min-h-screen bg-[#080D0A] text-white flex items-center justify-center px-6">
-        <div className="glass-card p-10 max-w-md text-center fade-in">
-          <div className="w-16 h-16 rounded-2xl flex items-center justify-center mx-auto mb-5"
-            style={{ background: "rgba(5,150,105,0.15)" }}>
-            <Maximize2 size={30} style={{ color: "var(--accent-primary)" }} />
+      <div className="min-h-screen bg-[--bg-base] text-[--text-primary] flex items-center justify-center p-6">
+        <div className="card p-8 max-w-md text-center">
+          <div className="w-12 h-12 rounded-md bg-[--accent-muted] flex items-center justify-center mx-auto mb-5">
+            <Maximize2 size={24} className="text-[--accent-light]" />
           </div>
-          <h2 className="text-2xl font-bold mb-3">Fullscreen Required</h2>
-          <p className="mb-6" style={{ color: "var(--text-secondary)" }}>
+          <h2 className="text-[17px] font-bold text-[--text-primary] mb-3">Fullscreen Required</h2>
+          <p className="text-xs text-[--text-secondary] mb-6 leading-relaxed">
             This exam must be taken in fullscreen mode. Your browser will enter fullscreen when you click Start.
             Exiting fullscreen will pause your exam and log a violation.
           </p>
-          <p className="mb-3 text-sm font-medium" style={{ color: "var(--warning)" }}>
+          <p className="mb-6 text-xs font-semibold text-[--amber] bg-amber-500/5 border border-amber-500/10 rounded-md py-2 px-3">
             ⚠ Exiting fullscreen more than {MAX_FULLSCREEN_EXITS} times will automatically submit your exam.
           </p>
           {violationReason && (
-            <p className="mb-4 text-sm" style={{ color: "var(--danger)" }}>{violationReason}</p>
+            <p className="mb-4 text-xs text-[--red] font-semibold">{violationReason}</p>
           )}
-          <button onClick={requestFullscreen} className="btn btn-primary btn-lg w-full"
-            style={{ background: "linear-gradient(135deg, #059669, #34D399)", color: "white", boxShadow: "0 4px 20px rgba(52,211,153,0.3)" }}>
-            <Maximize2 size={18} /> Enter Fullscreen & Start
+          <button onClick={requestFullscreen} className="btn btn-primary w-full h-11 justify-center">
+            <Maximize2 size={16} /> Enter Fullscreen & Start
           </button>
         </div>
       </div>
@@ -351,46 +439,177 @@ export default function ProctorWrapper({ sessionId, examId, children, onForceSub
   if (showViolation) {
     const warningsLeft = MAX_FULLSCREEN_EXITS - fullscreenExitCount;
     return (
-      <div className="student-theme proctor-overlay bg-[#080D0A] text-white">
-        <ShieldAlert size={64} className="mb-5" style={{ color: "var(--danger)" }} />
-        <h2 className="text-3xl font-bold mb-3">Exam Paused</h2>
-        <p className="text-lg mb-4 text-center max-w-md" style={{ color: "var(--text-secondary)" }}>
-          {violationReason}
-        </p>
-
-        {/* Warning counter strip */}
-        {fullscreenExitCount > 0 && (
-          <div className="mb-6 px-5 py-3 rounded-xl border text-sm font-semibold text-center"
-            style={{
-              background: warningsLeft === 0 ? "rgba(239,68,68,0.12)" : "rgba(245,158,11,0.1)",
-              borderColor: warningsLeft === 0 ? "rgba(239,68,68,0.4)" : "rgba(245,158,11,0.3)",
-              color: warningsLeft === 0 ? "var(--danger)" : "var(--warning)",
-            }}>
-            {warningsLeft > 0
-              ? `⚠ ${warningsLeft} warning${warningsLeft > 1 ? "s" : ""} remaining before auto-submission`
-              : "🚨 Final warning — next exit will auto-submit your exam"}
+      <div className="proctor-overlay bg-[--bg-base] text-[--text-primary] flex items-center justify-center p-6">
+        <div 
+          className="card max-w-md w-full p-8 text-center" 
+          style={{ 
+            border: "2px solid rgba(248,113,113,0.35)", 
+            boxShadow: "0 0 40px rgba(248,113,113,0.08)" 
+          }}
+        >
+          {/* Pause icon container: 72px circle, bg: --red-bg */}
+          <div className="w-[72px] h-[72px] rounded-full bg-[--red-bg] flex items-center justify-center mx-auto mb-5 shrink-0">
+            <ShieldAlert size={36} className="text-[--red]" />
           </div>
-        )}
 
-        <p className="mb-6 text-sm" style={{ color: "var(--text-muted)" }}>
-          This incident has been logged and reported to the admin.
-        </p>
-        <button onClick={requestFullscreen} className="btn btn-primary btn-lg"
-          style={{ background: "linear-gradient(135deg, #059669, #34D399)", color: "white", boxShadow: "0 4px 20px rgba(52,211,153,0.3)" }}>
-          <Maximize2 size={18} /> Return to Fullscreen
-        </button>
-        {resumeCountdown > 0 && (
-          <p className="mt-4 text-sm font-medium" style={{ color: "var(--text-muted)" }}>
-            Exam will remain paused until you return to fullscreen.
+          <h2 className="text-[26px] font-extrabold text-[--red] mb-2 leading-none">
+            Exam Paused
+          </h2>
+          
+          <p className="text-[13.5px] text-[--text-secondary] mb-6 leading-relaxed">
+            {violationReason}
           </p>
-        )}
+
+          {/* Warning count pill: amber colour scheme */}
+          {pauseCount > 0 && (
+            <div className="mb-6 py-2.5 px-4 rounded-md border border-amber-500/20 bg-amber-500/5 text-[--amber] text-xs font-semibold">
+              {3 - pauseCount > 0
+                ? `⚠ ${3 - pauseCount} warning${(3 - pauseCount) > 1 ? "s" : ""} remaining before auto-submission`
+                : "🚨 Final warning — next violation will auto-submit your exam"}
+            </div>
+          )}
+
+          <p className="text-[11.5px] text-[--text-muted] mb-6 font-semibold uppercase tracking-wider">
+            This incident has been logged and reported.
+          </p>
+
+          {/* Return button: full width, bg: --red, white text */}
+          <button 
+            onClick={requestFullscreen} 
+            className="w-full h-11 rounded-md bg-[#EF4444] hover:bg-red-500 hover:scale-[1.01] active:scale-[0.99] text-white font-bold text-sm transition-all duration-150 cursor-pointer"
+          >
+            Return to Fullscreen
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  if (cameraStatus === "denied") {
+    return (
+      <div className="min-h-screen bg-[#F8F5F0] text-slate-800 flex items-center justify-center p-6 font-sans">
+        <div className="card max-w-lg w-full p-8 shadow-xl border border-slate-200 bg-white rounded-2xl flex flex-col space-y-6">
+          <div className="flex items-center gap-3 border-b border-slate-100 pb-4">
+            <div className="w-12 h-12 rounded-full bg-red-100 flex items-center justify-center text-red-500 shrink-0">
+              <CameraOff size={24} />
+            </div>
+            <div>
+              <h2 className="text-xl font-bold text-slate-900 leading-tight">Camera Blocked or Unavailable</h2>
+              <p className="text-xs text-slate-500 mt-0.5">Mandatory webcam proctoring is required to sit this exam.</p>
+            </div>
+          </div>
+
+          {/* OS Tabs */}
+          <div className="space-y-4">
+            <div>
+              <p className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">Step 1: Grant Operating System Permission</p>
+              <div className="flex gap-2 p-1 bg-slate-100 rounded-lg w-fit">
+                <button 
+                  onClick={() => setActiveTab("mac")} 
+                  className={`px-3 py-1 text-xs font-bold rounded-md transition-all cursor-pointer ${activeTab === "mac" ? "bg-white text-slate-900 shadow-sm" : "text-slate-500 hover:text-slate-900"}`}
+                >
+                  macOS Instructions
+                </button>
+                <button 
+                  onClick={() => setActiveTab("win")} 
+                  className={`px-3 py-1 text-xs font-bold rounded-md transition-all cursor-pointer ${activeTab === "win" ? "bg-white text-slate-900 shadow-sm" : "text-slate-500 hover:text-slate-900"}`}
+                >
+                  Windows Instructions
+                </button>
+              </div>
+            </div>
+
+            <div className="p-4 bg-slate-50 border border-slate-200/60 rounded-xl text-xs text-slate-600 leading-relaxed">
+              {activeTab === "mac" ? (
+                <ol className="list-decimal list-inside space-y-1.5">
+                  <li>Click the Apple logo () in the top-left and open <strong className="text-slate-800">System Settings</strong>.</li>
+                  <li>Go to <strong className="text-slate-800">Privacy & Security</strong> &gt; <strong className="text-slate-800">Camera</strong>.</li>
+                  <li>Locate your web browser (e.g. Chrome, Safari) and <strong className="text-slate-800">toggle it ON</strong>.</li>
+                  <li>Restart your browser if prompted, then load this page.</li>
+                </ol>
+              ) : (
+                <ol className="list-decimal list-inside space-y-1.5">
+                  <li>Open the <strong className="text-slate-800">Start Menu</strong> and go to <strong className="text-slate-800">Settings</strong> (⚙).</li>
+                  <li>Click on <strong className="text-slate-800">Privacy & Security</strong> &gt; <strong className="text-slate-800">Camera</strong>.</li>
+                  <li>Ensure <strong className="text-slate-800">"Camera access"</strong> and <strong className="text-slate-800">"Let apps access your camera"</strong> are turned ON.</li>
+                  <li>Scroll down and verify access is toggled ON for your browser.</li>
+                </ol>
+              )}
+            </div>
+          </div>
+
+          {/* Browser Tabs */}
+          <div className="space-y-4">
+            <div>
+              <p className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">Step 2: Grant Site Permission in Browser</p>
+              <div className="flex gap-2 p-1 bg-slate-100 rounded-lg w-fit">
+                <button 
+                  onClick={() => setActiveBrowser("chrome")} 
+                  className={`px-3 py-1 text-xs font-bold rounded-md transition-all cursor-pointer ${activeBrowser === "chrome" ? "bg-white text-slate-900 shadow-sm" : "text-slate-500 hover:text-slate-900"}`}
+                >
+                  Chrome / Edge
+                </button>
+                <button 
+                  onClick={() => setActiveBrowser("safari")} 
+                  className={`px-3 py-1 text-xs font-bold rounded-md transition-all cursor-pointer ${activeBrowser === "safari" ? "bg-white text-slate-900 shadow-sm" : "text-slate-500 hover:text-slate-900"}`}
+                >
+                  Safari
+                </button>
+                <button 
+                  onClick={() => setActiveBrowser("firefox")} 
+                  className={`px-3 py-1 text-xs font-bold rounded-md transition-all cursor-pointer ${activeBrowser === "firefox" ? "bg-white text-slate-900 shadow-sm" : "text-slate-500 hover:text-slate-900"}`}
+                >
+                  Firefox
+                </button>
+              </div>
+            </div>
+
+            <div className="p-4 bg-slate-50 border border-slate-200/60 rounded-xl text-xs text-slate-600 leading-relaxed">
+              {activeBrowser === "chrome" && (
+                <ol className="list-decimal list-inside space-y-1.5">
+                  <li>Click the <strong className="text-slate-800">Lock Icon</strong> (🔒 or 🎥) on the left side of your browser address bar.</li>
+                  <li>Locate <strong className="text-slate-800">Camera</strong> and switch the option to <strong className="text-slate-800">Allow</strong>.</li>
+                  <li>A bar will appear saying "Reload this page" — click <strong className="text-slate-800">Reload</strong>.</li>
+                </ol>
+              )}
+              {activeBrowser === "safari" && (
+                <ol className="list-decimal list-inside space-y-1.5">
+                  <li>Click <strong className="text-slate-800">Safari</strong> in the top menu bar, and click <strong className="text-slate-800">Settings for This Website...</strong></li>
+                  <li>Find <strong className="text-slate-800">Camera</strong> in the dropdown box and select <strong className="text-slate-800">Allow</strong>.</li>
+                  <li>Refresh the browser tab.</li>
+                </ol>
+              )}
+              {activeBrowser === "firefox" && (
+                <ol className="list-decimal list-inside space-y-1.5">
+                  <li>Click the <strong className="text-slate-800">Camera Icon</strong> on the address bar.</li>
+                  <li>Clear any "Blocked Temporarily" rules by clicking the "X" button.</li>
+                  <li>Reload the page and select "Allow" when the permissions popup prompts you.</li>
+                </ol>
+              )}
+            </div>
+          </div>
+
+          <div className="flex gap-4 border-t border-slate-100 pt-5">
+            <button 
+              onClick={() => setCameraRetry(r => r + 1)}
+              className="btn btn-primary h-11 flex-1 font-bold text-sm bg-[#E85D04] hover:bg-[#E85D04]/90 border-0 text-white rounded-lg transition-all cursor-pointer"
+            >
+              Verify Camera Access
+            </button>
+          </div>
+        </div>
       </div>
     );
   }
 
   return (
     <>
-      <WebcamProctor sessionId={sessionId} enabled={process.env.NEXT_PUBLIC_WEBCAM_PROCTORING === "true"} />
+      <WebcamProctor 
+        sessionId={sessionId} 
+        enabled={true} 
+        onStatusChange={setCameraStatus}
+        retryTrigger={cameraRetry}
+      />
       {children}
     </>
   );

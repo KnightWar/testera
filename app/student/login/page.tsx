@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { GraduationCap, Hash, KeyRound, ArrowRight, ShieldCheck } from "lucide-react";
+import { GraduationCap, ArrowRight, ShieldAlert } from "lucide-react";
 
 export default function StudentLoginPage() {
   const router = useRouter();
@@ -38,97 +38,97 @@ export default function StudentLoginPage() {
   }
 
   return (
-    <div className="student-theme min-h-screen bg-[#080D0A]">
-      <main className="min-h-screen flex items-center justify-center px-4 relative overflow-hidden">
+    <div className="min-h-screen bg-[--bg-base] flex items-center justify-center p-4">
+      <div className="w-full max-w-[420px] space-y-6">
+        {/* Logo */}
+        <div className="flex justify-center">
+          <img src="/logo.png" alt="Prav-AI Logo" className="w-12 h-12 object-contain" />
+        </div>
 
-        <div
-          className="absolute inset-0 pointer-events-none"
-          style={{ background: "radial-gradient(ellipse at 50% 0%, rgba(52,211,153,0.12) 0%, transparent 65%)" }}
-        />
+        {/* Login Card */}
+        <div className="card p-8">
+          <h1 className="text-lg font-bold text-[--text-primary] text-center mb-1">
+            Student Login
+          </h1>
+          <p className="text-xs text-[--text-secondary] text-center mb-7">Prav-AI</p>
 
-        <div className="relative w-full max-w-md fade-in">
-          <div className="text-center mb-8">
-            <div className="w-16 h-16 rounded-2xl flex items-center justify-center mx-auto mb-4"
-              style={{ background: "linear-gradient(135deg, #059669, #34D399)", boxShadow: "0 8px 32px rgba(52,211,153,0.3)" }}>
-              <GraduationCap size={32} />
+          <form onSubmit={handleLogin} className="space-y-4">
+            {/* Registration Number */}
+            <div>
+              <label className="block text-[11px] font-semibold text-[--text-muted] uppercase tracking-wider mb-1.5">
+                Registration Number
+              </label>
+              <input
+                type="text"
+                placeholder="e.g. BCA2023001"
+                className="w-full h-10 px-4 bg-[--bg-input] text-[--text-primary] placeholder:text-[--text-muted] border border-[--border] rounded-md text-sm font-mono font-semibold tracking-wider focus:outline-none focus:border-[--border-accent]"
+                value={rollNo}
+                onChange={(e) => setRollNo(e.target.value)}
+                required
+                autoComplete="on"
+              />
             </div>
-            <h1 className="text-3xl font-bold mb-1"
-              style={{ background: "linear-gradient(135deg, #34D399, #6EE7B7)", WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent", backgroundClip: "text" }}>
-              Student Login
-            </h1>
-            <p style={{ color: "var(--text-secondary)" }}>Department of SoCSE — Testera</p>
-          </div>
 
-          <div className="card card--elevated p-8">
-            <form onSubmit={handleLogin}>
-              <div className="form-group">
-                <label className="form-label">Registration Number</label>
-                <div className="relative">
-                  {/* <Hash size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500" /> */}
-                  <input
-                    type="text"
-                    className="form-input pl-9 font-mono"
-                    placeholder="e.g. BCA2023001"
-                    value={rollNo}
-                    onChange={(e) => setRollNo(e.target.value)}
-                    required
-                    autoComplete="on"
-                  />
-                </div>
+            {/* Access Code */}
+            <div>
+              <label className="block text-[11px] font-semibold text-[--text-muted] uppercase tracking-wider mb-1.5">
+                Exam Access Code
+              </label>
+              <input
+                type="text"
+                placeholder="ENTER ACCESS CODE"
+                className="w-full h-10 px-4 font-mono font-semibold tracking-wider bg-[--bg-input] text-[--text-primary] placeholder:text-[--text-muted] border border-[--border] rounded-md text-sm focus:outline-none focus:border-[--border-accent] uppercase"
+                value={examAccessCode}
+                onChange={(e) => setExamAccessCode(e.target.value)}
+                required
+                autoComplete="off"
+                maxLength={8}
+              />
+              <p className="text-[11.5px] text-[--text-secondary] mt-1.5">
+                Enter the 8-character access code for this exam.
+              </p>
+            </div>
+
+            {error && (
+              <div className="p-3 rounded-md text-xs bg-[--red-bg] text-[--red] border border-red-500/20 font-medium">
+                {error}
               </div>
+            )}
 
-              <div className="form-group">
-                <label className="form-label">Exam Access Code</label>
-                <div className="relative">
-                  {/* <KeyRound size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500" /> */}
-                  <input
-                    type="text"
-                    className="form-input pl-9 font-mono uppercase tracking-widest"
-                    placeholder="Enter code given by faculty"
-                    value={examAccessCode}
-                    onChange={(e) => setExamAccessCode(e.target.value)}
-                    required
-                    autoComplete="off"
-                    maxLength={8}
-                  />
-                </div>
-                <p className="text-xs mt-1" style={{ color: "var(--color-text-muted)" }}>
-                  All students in your batch share the same 8-character code for this exam.
-                </p>
-              </div>
-
-              {error && (
-                <div className="mb-4 p-3 rounded-lg text-sm"
-                  style={{ background: "rgba(248,113,113,0.1)", color: "var(--color-danger)", border: "1px solid rgba(248,113,113,0.3)" }}>
-                  {error}
-                </div>
+            {/* Submit button */}
+            <button
+              type="submit"
+              className="btn btn-primary w-full h-10 flex items-center justify-center gap-2 mt-2 cursor-pointer rounded-md font-bold text-sm"
+              disabled={loading}
+            >
+              {loading ? (
+                <>
+                  <span className="spinner" /> Verifying…
+                </>
+              ) : (
+                <>
+                  Start Exam <ArrowRight size={14} />
+                </>
               )}
+            </button>
+          </form>
 
-              <button type="submit" className="btn w-full btn--primary" disabled={loading}
-                style={{ padding: "10px", fontSize: "14px" }}>
-                {loading ? <><span className="spinner" />Verifying…</> : <>Start Exam <ArrowRight size={18} /></>}
-              </button>
-            </form>
-
-            <div className="mt-5 p-4 rounded-xl text-sm flex gap-3 items-start"
-              style={{ background: "rgba(96,165,250,0.08)", border: "1px solid rgba(96,165,250,0.2)", color: "var(--text-secondary)" }}>
-              <ShieldCheck size={18} className="shrink-0 mt-0.5" style={{ color: "var(--info)" }} />
-              <div>
-                <strong style={{ color: "var(--info)" }}>Disclaimer:</strong>
-                <br></br>
-                <strong style={{ color: "#ca8a04ff" }}>
-                  Before you begin: <br></br>
-                  1. Make sure you are on a laptop, <br></br>
-                  2. Have a stable internet connection, and sitting in front of laptop.<br></br>
-                  3. Your screen activity will be monitored throughout the exam.<br></br>
-                  4. Switching between tabs, minimizing the exam tab, doing ALT TAB will penalise by auto-submit and failing.
-                </strong>
-
-              </div>
+          {/* Warning box */}
+          <div className="mt-6 bg-amber-500/[0.04] border border-amber-500/20 rounded-md p-5 text-[--amber]">
+            <div className="flex items-center gap-2 mb-3">
+              <ShieldAlert size={14} className="text-[--amber]" />
+              <p className="text-xs font-bold uppercase tracking-wider">Before you begin</p>
             </div>
+            <ol className="space-y-1.5 text-xs list-decimal list-inside opacity-90 leading-normal">
+              <li>Use CHROME BROWSER for Assessment.</li>
+              <li>Make sure you are on a laptop and sitting directly in front of the screen.</li>
+              <li>Ensure you have a highly stable internet connection.</li>
+              <li>Your screen activity and browser actions will be monitored throughout the exam.</li>
+              <li>Switching tabs or exiting fullscreen will result in automatic submission.</li>
+            </ol>
           </div>
         </div>
-      </main>
+      </div>
     </div>
   );
 }

@@ -5,7 +5,7 @@ import Link from "next/link";
 import {
   Download, BarChart3, UserCheck, AlertTriangle,
   CheckCircle, Clock, Brain, Trash2, Loader2,
-  AlertCircle, FileSpreadsheet
+  AlertCircle, FileSpreadsheet, Target
 } from "lucide-react";
 import ExamSubNav from "@/components/admin/ExamSubNav";
 
@@ -116,137 +116,128 @@ export default function ExamResultsPage({ params }: { params: Promise<{ id: stri
   }
 
   return (
-    <div className="max-w-7xl mx-auto space-y-8 fade-in text-[#F1F5F9]">
-      <div className="flex flex-col md:flex-row md:items-end justify-between gap-4">
-        <div className="flex-1">
-          <ExamSubNav examId={id} examTitle={exam?.title} />
-        </div>
-        <div className="flex gap-2 h-fit flex-wrap">
-          <a href={`/api/export?type=class_summary&exam_id=${id}`} className="btn btn-secondary btn-sm">
-            <Download size={14} /> Summary
-          </a>
-          <a href={`/api/export?type=analytics&exam_id=${id}`} className="btn btn-secondary btn-sm">
-            <BarChart3 size={14} /> Analytics
-          </a>
-          <a href={`/api/export?type=detailed_results&exam_id=${id}`} className="btn btn-primary btn-sm">
-            <FileSpreadsheet size={14} /> Full Excel Export
-          </a>
-        </div>
-      </div>
+    <div className="max-w-7xl mx-auto space-y-6 fade-in text-[--text-1]">
+      <ExamSubNav examId={id} examTitle={exam?.title} />
 
       {msg && (
-        <div className="flex items-center gap-2 p-3 rounded-xl text-sm"
-          style={{
-            background: msg.type === "success" ? "rgba(52,211,153,0.1)" : "rgba(248,113,113,0.1)",
-            color: msg.type === "success" ? "var(--success)" : "var(--danger)",
-            border: `1px solid ${msg.type === "success" ? "rgba(52,211,153,0.3)" : "rgba(248,113,113,0.3)"}`,
-          }}>
+        <div className={`flex items-center gap-2 p-3 rounded-xl text-sm border ${
+          msg.type === "success"
+            ? "bg-[--success-muted] text-[--success] border-[--success-border]"
+            : "bg-[--danger-muted] text-[--danger] border-[--danger-border]"
+        }`}>
           {msg.type === "success" ? <CheckCircle size={16} /> : <AlertCircle size={16} />}
           {msg.text}
         </div>
       )}
 
-      {/* Stats row */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+      {/* Stats Strip */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
         {[
-          { label: "Submitted", value: submitted.length, color: "var(--success)", icon: CheckCircle },
-          { label: "In Progress", value: active.length, color: "var(--info)", icon: Clock },
-          { label: "Avg Score", value: `${avgScore} / ${totalPossible}`, color: "var(--accent-secondary)", icon: BarChart3 },
-          { label: "Total Marks", value: totalPossible, color: "var(--text-muted)", icon: UserCheck },
-        ].map(({ label, value, color, icon: Icon }) => (
-          <div key={label} className="glass-card p-5">
-            <div className="flex items-center justify-between mb-2">
-              <p className="text-xs font-semibold uppercase tracking-wider" style={{ color: "var(--text-muted)" }}>{label}</p>
-              <Icon size={16} style={{ color }} />
+          { label: 'Submitted', value: submitted.length, icon: CheckCircle, color: 'text-[--success]' },
+          { label: 'In Progress', value: active.length, icon: Clock, color: 'text-[--info]' },
+          { label: 'Avg Score', value: `${avgScore} / ${totalPossible}`, icon: Target, color: 'text-[--accent]' },
+          { label: 'Total Marks', value: totalPossible, icon: BarChart3, color: 'text-[--text-1]' },
+        ].map(stat => {
+          const Icon = stat.icon;
+          return (
+            <div key={stat.label} className="bg-[--bg-surface] border border-[--border-base] rounded-xl px-5 py-4 flex items-center gap-4 shadow-sm">
+              <Icon size={18} className={stat.color} />
+              <div>
+                <p className="text-[11px] font-body text-[--text-3] uppercase tracking-wide">{stat.label}</p>
+                <p className="text-xl font-display font-bold text-[--text-1]">{stat.value}</p>
+              </div>
             </div>
-            <p className="text-2xl font-bold" style={{ color }}>{value}</p>
-          </div>
-        ))}
+          );
+        })}
+      </div>
+
+      {/* Sub-actions */}
+      <div className="flex items-center gap-3 mb-5">
+        <h2 className="text-sm font-display font-semibold text-[--text-1] flex-1">Student Results</h2>
+        <a href={`/api/export?type=class_summary&exam_id=${id}`} className="inline-flex items-center gap-2 px-3 py-1.5 bg-transparent hover:bg-[--bg-hover] text-[--text-2] hover:text-[--text-1] font-display font-medium text-xs rounded-lg border border-[--border-base] transition-all duration-150">
+          <Download size={13} /> Summary
+        </a>
+        <a href={`/api/export?type=analytics&exam_id=${id}`} className="inline-flex items-center gap-2 px-3 py-1.5 bg-transparent hover:bg-[--bg-hover] text-[--text-2] hover:text-[--text-1] font-display font-medium text-xs rounded-lg border border-[--border-base] transition-all duration-150">
+          <BarChart3 size={13} /> Analytics
+        </a>
+        <a href={`/api/export?type=detailed_results&exam_id=${id}`} className="inline-flex items-center gap-2 px-3 py-1.5 bg-[--accent] hover:bg-[--accent-light] text-white font-display font-semibold text-xs rounded-lg border border-[--accent-border] shadow-sm transition-all duration-150 cursor-pointer">
+          <FileSpreadsheet size={13} /> Full Excel Export
+        </a>
       </div>
 
       {/* Results Table */}
-      <div className="glass-card overflow-hidden">
-        <div className="p-5 border-b font-bold" style={{ borderColor: "var(--border-subtle)" }}>
-          Student Results
-        </div>
-        <div className="overflow-x-auto">
-          <table className="w-full text-sm">
-            <thead style={{ background: "rgba(255,255,255,0.03)" }}>
+      <div className="rounded-xl border border-[--border-base] overflow-hidden shadow-sm bg-[--bg-surface]">
+        <table className="w-full border-collapse">
+          <thead>
+            <tr className="bg-[--bg-surface] border-b border-[--border-base]">
+              {['Roll No', 'Name', 'Score', '%', 'Status', 'Violations', 'Actions'].map(col => (
+                <th key={col} className="px-5 py-3 text-left text-[11px] font-body font-medium text-[--text-3] uppercase tracking-[0.07em]">{col}</th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {sessions.length === 0 ? (
               <tr>
-                {["Roll No", "Name", "Score", "%", "Status", "Violations", "Actions"].map((h) => (
-                  <th key={h} className="text-left px-4 py-3 text-xs font-semibold uppercase tracking-wider"
-                    style={{ color: "var(--text-muted)" }}>{h}</th>
-                ))}
+                <td colSpan={7} className="py-16 text-center">
+                  <div className="flex flex-col items-center gap-3">
+                    <AlertCircle size={32} className="text-[--text-3]" />
+                    <p className="text-sm font-display font-medium text-[--text-2]">No submissions yet</p>
+                    <p className="text-xs text-[--text-3]">Student results will appear here once the exam is taken</p>
+                  </div>
+                </td>
               </tr>
-            </thead>
-            <tbody>
-              {sessions.length === 0 && (
-                <tr>
-                  <td colSpan={7} className="px-4 py-10 text-center" style={{ color: "var(--text-muted)" }}>
-                    No submissions yet
-                  </td>
-                </tr>
-              )}
-              {sessions.map((s) => {
-                const score = getScore(s);
+            ) : (
+              sessions.map(sub => {
+                const score = getScore(sub);
                 const pct = totalPossible > 0 ? ((score / totalPossible) * 100).toFixed(1) : "N/A";
-                const vTotal = violationTotal(s);
-                const isDeleting = deletingId === s.id;
-                const isConfirmingDelete = confirmDeleteId === s.id;
-                const isAiLoading = aiLoadingId === s.id;
+                const violations = violationTotal(sub);
+                const isDeleting = deletingId === sub.id;
+                const isConfirmingDelete = confirmDeleteId === sub.id;
+                const isAiLoading = aiLoadingId === sub.id;
+
+                const statusText = sub.submitted_at ? "SUBMITTED" : sub.is_active ? "IN PROGRESS" : "NOT STARTED";
+                const statusBadgeStyles = {
+                  SUBMITTED: 'bg-[--success-muted] text-[--success] border-[--success-border]',
+                  'IN PROGRESS': 'bg-[--info-muted] text-[--info] border-[--border-base]',
+                  'NOT STARTED': 'bg-[--bg-elevated] text-[--text-3] border-[--border-base]',
+                };
 
                 return (
-                  <tr key={s.id}
-                    className="border-t hover:bg-white/[0.02] transition-colors"
-                    style={{
-                      borderColor: "var(--border-subtle)",
-                      opacity: isDeleting ? 0.4 : 1,
-                      background: isConfirmingDelete ? "rgba(248,113,113,0.06)" : undefined,
-                    }}>
-                    <td className="px-4 py-3 font-mono text-xs">{s.students?.roll_no}</td>
-                    <td className="px-4 py-3 font-medium">{s.students?.name}</td>
-                    <td className="px-4 py-3 font-bold"
-                      style={{ color: totalPossible > 0 && score / totalPossible >= 0.5 ? "var(--success)" : "var(--danger)" }}>
-                      {score.toFixed(1)} / {totalPossible}
-                    </td>
-                    <td className="px-4 py-3">{pct}%</td>
-                    <td className="px-4 py-3">
-                      <span className={`badge ${s.submitted_at ? "badge-success" : s.is_active ? "badge-info" : "badge-neutral"}`}>
-                        {s.submitted_at ? "Submitted" : s.is_active ? "In Progress" : "Not started"}
+                  <tr key={sub.id} className="border-b border-[--border-dim] last:border-0 hover:bg-[--bg-hover] transition-colors duration-100 group">
+                    <td className="px-5 py-4 font-mono text-xs text-[--text-2]">{sub.students?.roll_no}</td>
+                    <td className="px-5 py-4 text-sm font-display font-medium text-[--text-1]">{sub.students?.name}</td>
+                    <td className="px-5 py-4 text-sm font-mono text-[--text-1] font-semibold">{score.toFixed(1)} / {totalPossible}</td>
+                    <td className="px-5 py-4 text-sm text-[--text-2]">{pct}%</td>
+                    <td className="px-5 py-4">
+                      <span className={`inline-flex items-center px-2.5 py-0.5 text-[11px] font-display font-semibold uppercase tracking-wide rounded-pill border ${statusBadgeStyles[statusText]}`}>
+                        {statusText}
                       </span>
                     </td>
-                    <td className="px-4 py-3">
-                      {vTotal > 0 ? (
-                        <span className="badge badge-warning">
-                          <AlertTriangle size={10} /> {vTotal}
-                        </span>
+                    <td className="px-5 py-4">
+                      {violations > 0 ? (
+                        <span className="text-xs font-mono font-bold text-[--danger] bg-[--danger-muted] border border-[--danger-border] px-2 py-0.5 rounded">{violations}</span>
                       ) : (
-                        <span style={{ color: "var(--text-muted)" }}>None</span>
+                        <span className="text-[--text-3]">—</span>
                       )}
                     </td>
-                    <td className="px-4 py-3">
-                      <div className="flex gap-1.5 flex-wrap">
-                        <Link href={`/admin/exams/${id}/results/${s.id}`} className="btn btn-secondary btn-sm">
+                    <td className="px-5 py-4">
+                      <div className="flex gap-2 opacity-60 hover:opacity-100 transition-opacity duration-150">
+                        <Link href={`/admin/exams/${id}/results/${sub.id}`} className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-[--bg-elevated] hover:bg-[--bg-hover] text-[--text-2] hover:text-[--text-1] font-display font-semibold text-xs rounded-lg border border-[--border-base] transition-all duration-150">
                           Grade
                         </Link>
                         <button
-                          onClick={() => handleAIGradeAll(s.id)}
+                          onClick={() => handleAIGradeAll(sub.id)}
                           disabled={isAiLoading}
-                          className="btn btn-sm"
-                          style={{ background: "rgba(167,139,250,0.15)", color: "var(--accent-secondary)" }}
+                          className="inline-flex items-center gap-1 px-2.5 py-1.5 bg-[--accent-muted] text-[--text-accent] hover:bg-[--accent] hover:text-white font-display font-semibold text-xs rounded-lg border border-[--accent-border] transition-all duration-150 cursor-pointer"
                           title="Auto-grade all answers (MCQ + keyword rules)"
                         >
                           {isAiLoading ? <Loader2 size={12} className="animate-spin" /> : <Brain size={12} />}
                           Auto
                         </button>
                         <button
-                          onClick={() => handleDeleteSession(s.id)}
+                          onClick={() => handleDeleteSession(sub.id)}
                           disabled={isDeleting}
-                          className="btn btn-sm"
-                          style={{
-                            background: isConfirmingDelete ? "rgba(248,113,113,0.25)" : "rgba(248,113,113,0.1)",
-                            color: "var(--danger)",
-                          }}
+                          className="inline-flex items-center gap-1 px-2.5 py-1.5 bg-[--danger-muted] text-[--danger] hover:bg-[--danger] hover:text-white font-display font-semibold text-xs rounded-lg border border-[--danger-border] transition-all duration-150 cursor-pointer"
                           title={isConfirmingDelete ? "Click again to confirm deletion" : "Delete session"}
                         >
                           {isDeleting ? <Loader2 size={12} className="animate-spin" /> : <Trash2 size={12} />}
@@ -256,10 +247,10 @@ export default function ExamResultsPage({ params }: { params: Promise<{ id: stri
                     </td>
                   </tr>
                 );
-              })}
-            </tbody>
-          </table>
-        </div>
+              })
+            )}
+          </tbody>
+        </table>
       </div>
     </div>
   );

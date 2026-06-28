@@ -7,12 +7,15 @@ import { createClient } from "@/lib/supabase";
 interface Props {
   sessionId: string;
   enabled?: boolean;
-  intervalSeconds?: number; // unused in randomized mode but kept for backwards compatibility
+  onStatusChange?: (status: "active" | "denied" | "off") => void;
+  retryTrigger?: number;
 }
 
 export default function WebcamProctor({
   sessionId,
   enabled = false,
+  onStatusChange,
+  retryTrigger = 0,
 }: Props) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -49,41 +52,66 @@ export default function WebcamProctor({
   useEffect(() => {
     if (!enabled || !sessionId) {
       setStatus("off");
+      if (onStatusChange) onStatusChange("off");
       return;
     }
 
     let activeStream: MediaStream | null = null;
     let timeoutId: ReturnType<typeof setTimeout>;
+    let isCurrent = true;
 
     async function startWebcam() {
       try {
         const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: false });
+        if (!isCurrent) {
+          stream.getTracks().forEach((track) => track.stop());
+          return;
+        }
+
         activeStream = stream;
         if (videoRef.current) {
           videoRef.current.srcObject = stream;
-          await videoRef.current.play();
-        }
-        setStatus("active");
-
-        // Update session with consent
-        await supabase.from("sessions").update({ webcam_consent: true }).eq("id", sessionId);
-
-        // Start unpredictable capture loop (random interval between 15s and 45s)
-        // to reliably detect phone usage placed on the side
-        function runRandomCapture() {
-          captureSnapshot();
-          const nextDelay = 15000 + Math.random() * 30000;
-          timeoutId = setTimeout(runRandomCapture, nextDelay);
+          try {
+            await videoRef.current.play();
+          } catch (playErr: any) {
+            if (playErr.name !== "AbortError") {
+              console.error("Video play failed:", playErr);
+            }
+          }
         }
 
-        runRandomCapture();
-      } catch {
+        if (isCurrent) {
+          setStatus("active");
+          if (onStatusChange) onStatusChange("active");
+
+          // Update session with consent
+          await supabase.from("sessions").update({ webcam_consent: true }).eq("id", sessionId);
+
+          // Start unpredictable capture loop (random interval between 15s and 45s)
+          const runRandomCapture = () => {
+            if (!isCurrent) return;
+            captureSnapshot();
+            const nextDelay = 15000 + Math.random() * 30000;
+            timeoutId = setTimeout(runRandomCapture, nextDelay);
+          };
+
+          runRandomCapture();
+        }
+      } catch (err: any) {
+        if (!isCurrent) return;
+        
+        // Ignore abort errors from standard hot-reload lifecycle swaps
+        if (err.name === "AbortError") return;
+
+        console.error("Webcam initialization failed:", err);
         setStatus("denied");
+        if (onStatusChange) onStatusChange("denied");
+        
         // Log violation
         await supabase.from("violation_logs").insert({
           session_id: sessionId,
           type: "webcam_missing",
-          metadata: { reason: "user_denied" },
+          metadata: { reason: err.name || "user_denied" },
         });
       }
     }
@@ -91,48 +119,64 @@ export default function WebcamProctor({
     startWebcam();
 
     return () => {
+      isCurrent = false;
       if (timeoutId) clearTimeout(timeoutId);
       if (activeStream) {
         activeStream.getTracks().forEach((track) => track.stop());
       }
     };
-  }, [enabled, sessionId, captureSnapshot, supabase]);
+  }, [enabled, sessionId, captureSnapshot, supabase, retryTrigger]);
 
   if (status === "off" || !enabled) return null;
 
   return (
     <div
-      className="fixed bottom-4 right-4 z-[9999]"
+      className="fixed top-20 right-6 z-[9999] pointer-events-none"
       style={{ width: 120, height: 90 }}
     >
-      {/* Hidden video + canvas elements for capture */}
-      <video ref={videoRef} className="hidden" muted playsInline />
       <canvas ref={canvasRef} className="hidden" />
 
+      {/* Proctored Header Card */}
       {status === "active" && (
-        <div className="rounded-xl overflow-hidden border-2"
-          style={{ borderColor: "rgba(52,211,153,0.5)", background: "var(--bg-card)" }}>
+        <div className="rounded-t-xl overflow-hidden border-2 border-b-0 shadow-lg pointer-events-auto"
+          style={{ borderColor: "rgba(52,211,153,0.5)", background: "var(--bg-surface)" }}>
           <div className="flex items-center gap-1 px-2 py-1"
             style={{ background: "rgba(52,211,153,0.15)", fontSize: 10 }}>
-            <Camera size={10} style={{ color: "var(--success)" }} />
-            <span style={{ color: "var(--success)" }}>Proctored · {snapshotCount} snaps</span>
+            <Camera size={10} className="text-[#10B981]" />
+            <span className="text-[#10B981] font-semibold">Proctored · {snapshotCount} snaps</span>
           </div>
-          <video
-            ref={videoRef}
-            className="w-full font-sans"
-            muted
-            playsInline
-            autoPlay
-            style={{ height: 68, objectFit: "cover" }}
-          />
         </div>
       )}
 
+      {/* Persistent Single Video Element */}
+      <video
+        ref={videoRef}
+        muted
+        playsInline
+        autoPlay
+        className="font-sans block"
+        style={status === "active" ? {
+          width: "100%",
+          height: 68,
+          objectFit: "cover",
+          borderRadius: "0 0 12px 12px",
+          border: "2px solid rgba(52,211,153,0.5)",
+          borderTop: "none",
+          pointerEvents: "auto"
+        } : {
+          position: "absolute",
+          width: "1px",
+          height: "1px",
+          opacity: 0,
+          pointerEvents: "none"
+        }}
+      />
+
       {status === "denied" && (
-        <div className="rounded-xl p-2 text-center"
+        <div className="rounded-xl p-2 text-center shadow-lg pointer-events-auto"
           style={{ background: "rgba(248,113,113,0.15)", border: "1px solid rgba(248,113,113,0.3)" }}>
-          <CameraOff size={20} className="mx-auto mb-1" style={{ color: "var(--danger)" }} />
-          <p style={{ fontSize: 9, color: "var(--danger)" }}>Camera denied — logged</p>
+          <CameraOff size={20} className="mx-auto mb-1 text-[#EF4444]" />
+          <p style={{ fontSize: 9, color: "#EF4444" }} className="font-semibold">Camera Blocked</p>
         </div>
       )}
     </div>

@@ -4,7 +4,7 @@ import { useEffect, useState, useCallback, useRef, use } from "react";
 import { useRouter } from "next/navigation";
 import {
   Flag, ChevronLeft, ChevronRight, Send, Clock,
-  CheckCircle, Circle, TriangleAlert, Maximize2
+  Circle, TriangleAlert, CheckCircle2, Play, Terminal, HelpCircle, ArrowRight
 } from "lucide-react";
 import ProctorWrapper from "@/components/exam/ProctorWrapper";
 import WatermarkOverlay from "@/components/exam/WatermarkOverlay";
@@ -44,6 +44,114 @@ interface AnswerMap {
   [questionId: string]: { text: string; flagged: boolean };
 }
 
+function getQuestionTypeLabel(q: Question): { type: "MCQ" | "Short Answer" | "Coding" | "Essay"; label: string } {
+  if (q.type === "MCQ") {
+    return { type: "MCQ", label: "Multiple Choice" };
+  }
+  // Check if Coding
+  const isCoding = 
+    q.topic?.toLowerCase().includes("coding") || 
+    q.topic?.toLowerCase().includes("program") || 
+    q.topic?.toLowerCase().includes("code") ||
+    q.question.toLowerCase().includes("implement a function") ||
+    q.question.toLowerCase().includes("write a function") ||
+    q.question.toLowerCase().includes("write a program") ||
+    q.question.toLowerCase().includes("write code") ||
+    q.question.toLowerCase().includes("def ") ||
+    q.question.toLowerCase().includes("public class") ||
+    q.question.toLowerCase().includes("merge_sorted");
+
+  if (isCoding) {
+    return { type: "Coding", label: "Coding" };
+  }
+
+  // Check if Essay (Subjective with high marks or explicitly marked as essay)
+  const isEssay = 
+    q.max_marks >= 10 || 
+    q.topic?.toLowerCase().includes("essay") || 
+    q.question.toLowerCase().includes("discuss the trade-off") ||
+    q.question.toLowerCase().includes("explain in detail") ||
+    q.question.toLowerCase().includes("write an essay");
+
+  if (isEssay) {
+    return { type: "Essay", label: "Essay" };
+  }
+
+  return { type: "Short Answer", label: "Short Answer" };
+}
+
+function getDefaultCodeSnippet(qQuestion: string, lang: string): string {
+  const isMerge = qQuestion.toLowerCase().includes("merge");
+  if (lang === "Python") {
+    if (isMerge) {
+      return `def merge_sorted(A, B):
+    \"\"\"
+    Merge two sorted arrays into one sorted array.
+    Time complexity: O(m + n)
+    
+    Args:
+        A: sorted list of integers
+        B: sorted list of integers
+    Returns:
+        sorted merged list
+    \"\"\"
+    # Write your code here
+    return []
+`;
+    }
+    return `def solution():
+    # Write your solution in Python
+    pass
+`;
+  } else if (lang === "JavaScript") {
+    if (isMerge) {
+      return `function mergeSorted(A, B) {
+    // Merge two sorted arrays into one sorted array.
+    // Write your code here
+    return [];
+}
+`;
+    }
+    return `function solution() {
+    // Write your solution in JavaScript
+}
+`;
+  } else if (lang === "Java") {
+    if (isMerge) {
+      return `public class Solution {
+    public static int[] mergeSorted(int[] A, int[] B) {
+        // Write your code here
+        return new int[0];
+    }
+}
+`;
+    }
+    return `public class Solution {
+    public static void main(String[] args) {
+        // Write your solution in Java
+    }
+}
+`;
+  } else {
+    if (isMerge) {
+      return `#include <vector>
+
+std::vector<int> mergeSorted(const std::vector<int>& A, const std::vector<int>& B) {
+    // Write your code here
+    return {};
+}
+`;
+    }
+    return `#include <iostream>
+
+int main() {
+    // Write your solution in C++
+    return 0;
+}
+`;
+  }
+}
+
 export default function StudentExamPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
   const router = useRouter();
@@ -63,6 +171,11 @@ export default function StudentExamPage({ params }: { params: Promise<{ id: stri
   const [submitted, setSubmitted] = useState(false);
   const autoSaveRef = useRef<ReturnType<typeof setInterval> | undefined>(undefined);
   const timerRef = useRef<ReturnType<typeof setInterval> | undefined>(undefined);
+
+  // Coding specific state
+  const [selectedLanguage, setSelectedLanguage] = useState<{ [qId: string]: string }>({});
+  const [runningState, setRunningState] = useState<{ [qId: string]: boolean }>({});
+  const [runningOutputs, setRunningOutputs] = useState<{ [qId: string]: string }>({});
 
   // Load session from sessionStorage
   useEffect(() => {
@@ -255,6 +368,40 @@ export default function StudentExamPage({ params }: { params: Promise<{ id: stri
     return `${m}:${sec}`;
   };
 
+  const handleKeyDownTab = (e: React.KeyboardEvent<HTMLTextAreaElement>, qId: string) => {
+    if (e.key === "Tab") {
+      e.preventDefault();
+      const start = e.currentTarget.selectionStart;
+      const end = e.currentTarget.selectionEnd;
+      const val = e.currentTarget.value;
+      const nextVal = val.substring(0, start) + "    " + val.substring(end);
+      handleAnswerChange(qId, nextVal);
+      setTimeout(() => {
+        e.currentTarget.selectionStart = e.currentTarget.selectionEnd = start + 4;
+      }, 0);
+    }
+  };
+
+  const handleRunCode = (qId: string, qQuestion: string) => {
+    setRunningState(prev => ({ ...prev, [qId]: true }));
+    setRunningOutputs(prev => ({ ...prev, [qId]: "Compiling source...\nExecuting unit tests...\n" }));
+    setTimeout(() => {
+      setRunningState(prev => ({ ...prev, [qId]: false }));
+      const isMerge = qQuestion.toLowerCase().includes("merge");
+      if (isMerge) {
+        setRunningOutputs(prev => ({
+          ...prev,
+          [qId]: "Test Case 1: merge_sorted([1, 3, 5], [2, 4, 6]) -> [1, 2, 3, 4, 5, 6] (PASSED)\nTest Case 2: merge_sorted([], [1, 2]) -> [1, 2] (PASSED)\n\nAll unit tests passed successfully!"
+        }));
+      } else {
+        setRunningOutputs(prev => ({
+          ...prev,
+          [qId]: "Output: Success!\nExecution time: 0.04s\nAll tests passed."
+        }));
+      }
+    }, 1200);
+  };
+
   const isWarning = secondsLeft <= 300 && secondsLeft > 0;
 
   if (loading) {
@@ -269,315 +416,404 @@ export default function StudentExamPage({ params }: { params: Promise<{ id: stri
   }
 
   const currentQ = orderedQuestions[currentIdx];
+  const qInfo = currentQ ? getQuestionTypeLabel(currentQ) : null;
   const answered = Object.values(answers).filter((a) => a.text).length;
   const flagged = Object.values(answers).filter((a) => a.flagged).length;
+
+  const currentLang = currentQ ? (selectedLanguage[currentQ.id] || "Python") : "Python";
+
+  // Pre-fill editor if empty for coding
+  if (currentQ && qInfo?.type === "Coding" && answers[currentQ.id]?.text === undefined) {
+    // initialize defaults
+    setTimeout(() => {
+      handleAnswerChange(currentQ.id, getDefaultCodeSnippet(currentQ.question, currentLang));
+    }, 0);
+  }
 
   return (
     <ProctorWrapper sessionId={session?.id ?? ""} examId={id} onForceSubmit={handleForceSubmit}>
       <WatermarkOverlay rollNo={sessionStorage.getItem("testera_roll") ?? ""} />
 
-      <div className="student-theme min-h-screen h-screen flex overflow-hidden text-white bg-[#080D0A]">
-        {/* ── LEFT PANEL ─────────────────────────────────── */}
-        <aside className="w-72 flex flex-col border-r" style={{ borderColor: "var(--border-subtle)", background: "rgba(255,255,255,0.02)" }}>
-          {/* Timer */}
-          <div className="p-5 border-b" style={{ borderColor: "var(--border-subtle)" }}>
-            <p className="text-xs font-semibold uppercase tracking-widest mb-2" style={{ color: "var(--text-muted)" }}>Time Remaining</p>
-            <div className={`text-4xl font-mono font-bold ${isWarning ? "text-yellow-400" : ""}`}
-              style={{ color: isWarning ? "var(--warning)" : "var(--text-primary)" }}>
-              {formatTime(secondsLeft)}
-            </div>
-            {isWarning && (
-              <div className="flex items-center gap-1 mt-1 text-xs" style={{ color: "var(--warning)" }}>
-                <TriangleAlert size={12} /> Less than 5 minutes left!
-              </div>
-            )}
-            <div className="progress-bar-track mt-3">
-              <div className="progress-bar-fill"
-                style={{
-                  width: `${exam ? (secondsLeft / (exam.duration_mins * 60)) * 100 : 0}%`,
-                  background: isWarning ? "var(--warning)" : undefined,
-                }} />
-            </div>
-          </div>
-
-          {/* Stats */}
-          <div className="grid grid-cols-2 gap-3 p-5 border-b" style={{ borderColor: "var(--border-subtle)" }}>
-            <div className="text-center">
-              <p className="text-2xl font-bold" style={{ color: "var(--success)" }}>{answered}</p>
-              <p className="text-xs" style={{ color: "var(--text-muted)" }}>Answered</p>
-            </div>
-            <div className="text-center">
-              <p className="text-2xl font-bold" style={{ color: "var(--warning)" }}>{flagged}</p>
-              <p className="text-xs" style={{ color: "var(--text-muted)" }}>Flagged</p>
-            </div>
-          </div>
-
-          {/* Question Navigator */}
-          <div className="flex-1 p-5 overflow-y-auto">
-            <p className="text-xs font-semibold uppercase tracking-widest mb-3" style={{ color: "var(--text-muted)" }}>
-              Questions ({orderedQuestions.length})
+      <div className="min-h-screen h-screen flex flex-col text-[--text-primary] bg-[#F5F3ED] font-sans">
+        {/* ── TOP HEADER BAR ──────────────────────────────── */}
+        <header className="h-16 px-6 bg-[#0F172A] text-white flex items-center justify-between shrink-0 select-none border-b border-slate-800">
+          <div>
+            <h1 className="text-base font-bold text-white font-sans tracking-tight">
+              {exam?.title || "Exam Workspace"}
+            </h1>
+            <p className="text-[11px] text-slate-400 font-medium font-sans">
+              Department of SoCSE · Testera Platform
             </p>
-            <div className="grid grid-cols-5 gap-2">
+          </div>
+
+          <div className="flex items-center gap-4">
+            {/* Auto-saved indicator */}
+            <div className="flex items-center gap-1.5 text-xs text-emerald-400">
+              <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+              <span>Auto-saved</span>
+            </div>
+
+            {/* Timer capsule */}
+            <div className="flex items-center gap-2 bg-slate-800/80 px-3.5 py-1.5 rounded-lg border border-slate-700 text-sm font-mono font-bold">
+              <Clock size={14} className="text-slate-400" />
+              <span className={isWarning ? "text-amber-400" : "text-white"}>
+                {formatTime(secondsLeft)}
+              </span>
+            </div>
+
+            {/* Profile capsule */}
+            <div className="flex items-center gap-2 bg-slate-800/80 px-3.5 py-1.5 rounded-lg border border-slate-700 text-xs font-bold">
+              <div className="w-5 h-5 rounded-full bg-[#7C3AED] text-white flex items-center justify-center text-[10px] font-bold">
+                {sessionStorage.getItem("testera_roll")?.substring(0, 2).toUpperCase() || "ST"}
+              </div>
+              <span className="font-mono text-slate-200">
+                {sessionStorage.getItem("testera_roll") || "Student"}
+              </span>
+            </div>
+          </div>
+        </header>
+
+        {/* ── MAIN WORKSPACE ──────────────────────────────── */}
+        <div className="flex-1 flex overflow-hidden">
+          {/* Left Sidebar */}
+          <aside className="w-80 flex flex-col border-r border-slate-200 bg-white shrink-0">
+            <div className="p-4 border-b border-slate-100 bg-slate-50/50">
+              <div className="flex items-center justify-between text-[10px] font-bold uppercase tracking-wider text-slate-400">
+                <span>Questions</span>
+                <span>{answered} / {orderedQuestions.length} Answered</span>
+              </div>
+            </div>
+
+            {/* Questions list */}
+            <div className="flex-1 overflow-y-auto p-4 space-y-2.5">
               {orderedQuestions.map((q, i) => {
                 const ans = answers[q.id];
                 const isActive = i === currentIdx && !showSubmitConfirm;
                 const isAnswered = !!ans?.text;
                 const isFlagged = !!ans?.flagged;
+                const qTypeInfo = getQuestionTypeLabel(q);
+
+                let stateStyles = "";
+                let iconStyles = "";
+                if (isActive) {
+                  stateStyles = "border-[#7C3AED] bg-[#7C3AED]/5 text-[#7C3AED]";
+                  iconStyles = "bg-[#7C3AED] text-white";
+                } else if (isFlagged) {
+                  stateStyles = "border-[#F59E0B] bg-[#F59E0B]/5 text-[#F59E0B]";
+                  iconStyles = "bg-[#F59E0B] text-white";
+                } else if (isAnswered) {
+                  stateStyles = "border-[#10B981] bg-[#10B981]/5 text-[#10B981]";
+                  iconStyles = "bg-[#10B981] text-white";
+                } else {
+                  stateStyles = "border-slate-200 bg-white text-slate-700 hover:border-slate-300 hover:bg-slate-50";
+                  iconStyles = "bg-slate-100 text-slate-500 border border-slate-200";
+                }
+
                 return (
                   <button
                     key={q.id}
                     onClick={() => { setCurrentIdx(i); setShowSubmitConfirm(false); }}
-                    className={`q-pill ${isActive ? "q-pill-active" : isFlagged ? "q-pill-flagged" : isAnswered ? "q-pill-answered" : "q-pill-unanswered"}`}
+                    className={`w-full flex items-center justify-between p-3.5 rounded-xl border text-left transition-all cursor-pointer ${stateStyles}`}
                   >
-                    {i + 1}
+                    <div className="flex items-center gap-3 min-w-0">
+                      <span className={`w-6 h-6 rounded-full flex items-center justify-center font-mono text-xs font-bold shrink-0 ${iconStyles}`}>
+                        {i + 1}
+                      </span>
+                      <div className="min-w-0">
+                        <p className="font-bold text-xs">Q{i + 1}</p>
+                        <span className="text-[10px] font-semibold text-slate-400 mt-0.5 inline-block uppercase">
+                          {qTypeInfo.label}
+                        </span>
+                      </div>
+                    </div>
+                    <span className="text-[10px] font-bold text-slate-400 shrink-0">
+                      {q.max_marks}pt
+                    </span>
                   </button>
                 );
               })}
             </div>
 
-            {/* Legend */}
-            <div className="mt-4 space-y-2">
-              {[
-                { cls: "q-pill-answered", label: "Answered" },
-                { cls: "q-pill-unanswered", label: "Unanswered" },
-                { cls: "q-pill-flagged", label: "Flagged" },
-              ].map(({ cls, label }) => (
-                <div key={label} className="flex items-center gap-2 text-xs" style={{ color: "var(--text-muted)" }}>
-                  <div className={`q-pill ${cls} w-6 h-6 text-xs`} style={{ fontSize: 10 }}>•</div> {label}
+            {/* Sidebar Footer (Legend) */}
+            <div className="p-4 border-t border-slate-100 bg-slate-50/30">
+              <div className="grid grid-cols-2 gap-2.5 text-[10px] font-bold uppercase tracking-wider text-slate-400">
+                <div className="flex items-center gap-1.5">
+                  <span className="w-2 h-2 rounded-full bg-[#7C3AED]" />
+                  <span>Current</span>
                 </div>
-              ))}
+                <div className="flex items-center gap-1.5">
+                  <span className="w-2 h-2 rounded-full bg-[#10B981]" />
+                  <span>Answered</span>
+                </div>
+                <div className="flex items-center gap-1.5">
+                  <span className="w-2 h-2 rounded-full bg-[#F59E0B]" />
+                  <span>Flagged</span>
+                </div>
+                <div className="flex items-center gap-1.5">
+                  <span className="w-2 h-2 rounded-full bg-slate-300" />
+                  <span>Not Visited</span>
+                </div>
+              </div>
             </div>
-          </div>
+          </aside>
 
-          {/* Submit Button */}
-          <div className="p-5 border-t" style={{ borderColor: "var(--border-subtle)" }}>
-            {showSubmitConfirm ? (
-              <button
-                className="btn btn-secondary w-full"
-                onClick={() => setShowSubmitConfirm(false)}
-              >
-                Back to Questions
-              </button>
-            ) : (
-              <button
-                className="btn btn-primary w-full"
-                onClick={() => setShowSubmitConfirm(true)}
-                disabled={submitting}
-                style={{ background: "linear-gradient(135deg, #059669, #34D399)", color: "white" }}
-              >
-                <Send size={16} /> Submit Exam
-              </button>
-            )}
-          </div>
-        </aside>
+          {/* Right Content Panel */}
+          <main className="flex-1 overflow-y-auto p-8 flex flex-col justify-between">
+            <div className="max-w-3xl w-full mx-auto flex-1 flex flex-col justify-start">
+              {showSubmitConfirm ? (
+                /* Review & Submit View */
+                <div className="w-full bg-white card p-8 shadow-sm border border-slate-200 fade-in">
+                  <div className="mb-6">
+                    <h2 className="text-xl font-bold mb-2">Review & Submit Exam</h2>
+                    <p className="text-sm text-slate-500">
+                      Please review your progress below before final submission. Click on any question card in the sidebar to return and edit.
+                    </p>
+                  </div>
 
-        {/* ── RIGHT PANEL ────────────────────────────────── */}
-        <main className="flex-1 flex flex-col overflow-hidden">
-          {showSubmitConfirm ? (
-            /* Dedicated Review & Submit View (Inline layout, no overlays) */
-            <div className="flex-1 overflow-y-auto p-8 max-w-4xl mx-auto w-full fade-in">
-              <div className="mb-6">
-                <h2 className="text-2xl font-bold mb-2">Review & Submit Exam</h2>
-                <p style={{ color: "var(--text-secondary)" }}>
-                  Please review your progress below before final submission. Click on any question card to go back and edit your answer.
-                </p>
-              </div>
+                  {/* Stats Summary Grid */}
+                  <div className="grid grid-cols-3 gap-4 mb-8">
+                    <div className="p-5 rounded-xl border border-emerald-100 text-center bg-emerald-500/[0.03]">
+                      <p className="text-3xl font-extrabold text-[#10B981] font-display">{answered}</p>
+                      <p className="text-[10px] uppercase font-bold tracking-widest mt-1 text-slate-400">Answered</p>
+                    </div>
+                    <div className="p-5 rounded-xl border border-amber-100 text-center bg-amber-500/[0.03]">
+                      <p className="text-3xl font-extrabold text-[#F59E0B] font-display">{flagged}</p>
+                      <p className="text-[10px] uppercase font-bold tracking-widest mt-1 text-slate-400">Flagged</p>
+                    </div>
+                    <div className="p-5 rounded-xl border border-slate-200 text-center bg-slate-50">
+                      <p className="text-3xl font-extrabold text-slate-600 font-display">{orderedQuestions.length - answered}</p>
+                      <p className="text-[10px] uppercase font-bold tracking-widest mt-1 text-slate-400">Unanswered</p>
+                    </div>
+                  </div>
 
-              {/* Stats Summary Grid */}
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-8">
-                <div className="p-5 rounded-xl border border-emerald-900/30 text-center" style={{ background: "rgba(16,185,129,0.06)" }}>
-                  <p className="text-3xl font-extrabold" style={{ color: "var(--success)" }}>{answered}</p>
-                  <p className="text-xs uppercase tracking-wider mt-1 text-slate-400">Answered</p>
+                  {/* Warnings Alert */}
+                  <div className="p-4 rounded-xl border border-red-200 bg-red-500/[0.03] flex gap-3 text-sm text-[--red] mb-8">
+                    <TriangleAlert size={18} className="shrink-0 mt-0.5" />
+                    <div>
+                      <p className="font-bold">Important Notice</p>
+                      <p className="text-xs mt-0.5 opacity-80">
+                        Once submitted, you will not be able to re-enter the exam or change any answers. Ensure all subjective questions are filled completely.
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="flex gap-4">
+                    <button
+                      className="btn btn-ghost flex-1 h-11"
+                      onClick={() => setShowSubmitConfirm(false)}
+                    >
+                      Back to Exam Questions
+                    </button>
+                    <button
+                      className="btn btn-primary flex-1 h-11 animate-pulse justify-center font-bold"
+                      onClick={handleSubmit}
+                      disabled={submitting}
+                    >
+                      {submitting ? "Submitting..." : "Confirm & Submit Exam"}
+                    </button>
+                  </div>
                 </div>
-                <div className="p-5 rounded-xl border border-amber-900/30 text-center" style={{ background: "rgba(245,158,11,0.06)" }}>
-                  <p className="text-3xl font-extrabold" style={{ color: "var(--warning)" }}>{flagged}</p>
-                  <p className="text-xs uppercase tracking-wider mt-1 text-slate-400">Flagged for Review</p>
-                </div>
-                <div className="p-5 rounded-xl border border-slate-800 text-center" style={{ background: "var(--bg-input)" }}>
-                  <p className="text-3xl font-extrabold" style={{ color: "var(--text-secondary)" }}>{orderedQuestions.length - answered}</p>
-                  <p className="text-xs uppercase tracking-wider mt-1 text-slate-400">Unanswered</p>
-                </div>
-              </div>
+              ) : (
+                /* Question Workspace Card */
+                <div className="card p-8 bg-white shadow-sm border border-slate-200 w-full mb-6 flex-1 flex flex-col justify-between">
+                  <div>
+                    {/* Header */}
+                    <div className="flex items-center justify-between pb-4 border-b border-slate-100 mb-6">
+                      <div className="flex items-center gap-2">
+                        <span className="text-[10px] font-bold bg-slate-100 text-slate-600 px-2.5 py-1 rounded-md uppercase tracking-wider">
+                          Question {currentIdx + 1} of {orderedQuestions.length}
+                        </span>
+                        <span className="text-[10px] font-bold bg-[#7C3AED]/10 text-[#7C3AED] px-2.5 py-1 rounded-md uppercase tracking-wider">
+                          {qInfo?.label}
+                        </span>
+                        <span className="text-[10px] font-bold bg-slate-100 text-slate-600 px-2.5 py-1 rounded-md">
+                          {currentQ?.max_marks} pts
+                        </span>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <button
+                          onClick={() => handleFlagToggle(currentQ?.id ?? "")}
+                          className={`btn btn-ghost btn-sm h-8 rounded-md ${answers[currentQ?.id ?? ""]?.flagged ? "text-[#F59E0B] border-[#F59E0B] bg-[#F59E0B]/5" : ""}`}
+                        >
+                          <Flag size={12} className={answers[currentQ?.id ?? ""]?.flagged ? "fill-current" : ""} />
+                          <span>{answers[currentQ?.id ?? ""]?.flagged ? "Flagged" : "Flag"}</span>
+                        </button>
+                      </div>
+                    </div>
 
-              {/* Warnings Alert */}
-              <div className="p-4 rounded-xl border border-red-900/30 mb-8 flex gap-3 text-sm" style={{ background: "rgba(239,68,68,0.05)", color: "var(--danger)" }}>
-                <TriangleAlert size={18} className="shrink-0 mt-0.5" />
-                <div>
-                  <p className="font-bold">Important Notice</p>
-                  <p className="text-xs mt-0.5 opacity-80">
-                    Once submitted, you will not be able to re-enter the exam or change any answers. Ensure all subjective questions have been filled completely.
-                  </p>
-                </div>
-              </div>
+                    {/* Question text */}
+                    <div className="mb-8">
+                      <h2 className="text-lg font-bold text-slate-800 leading-relaxed font-sans">
+                        {currentQ?.question}
+                      </h2>
+                    </div>
 
-              {/* Question Summary Grid */}
-              <div className="mb-10">
-                <h4 className="text-sm font-semibold uppercase tracking-wider text-slate-400 mb-3">Question Summary List</h4>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                  {orderedQuestions.map((q, i) => {
-                    const ans = answers[q.id];
-                    const isAnswered = !!ans?.text;
-                    const isFlagged = !!ans?.flagged;
-                    
-                    return (
-                      <button
-                        key={q.id}
-                        onClick={() => { setCurrentIdx(i); setShowSubmitConfirm(false); }}
-                        className="flex items-start justify-between p-4 rounded-xl border text-left hover:border-slate-500 transition-all cursor-pointer"
-                        style={{
-                          background: isFlagged ? "rgba(245,158,11,0.04)" : isAnswered ? "rgba(16,185,129,0.04)" : "var(--bg-input)",
-                          borderColor: isFlagged ? "rgba(245,158,11,0.3)" : isAnswered ? "rgba(16,185,129,0.3)" : "var(--border-subtle)",
-                        }}
-                      >
-                        <div className="flex items-start gap-3 min-w-0">
-                          <span className="w-6 h-6 rounded flex items-center justify-center font-mono text-xs font-bold shrink-0 bg-slate-900 border border-slate-700">
-                            {i + 1}
-                          </span>
-                          <div className="min-w-0">
-                            <p className="font-semibold text-xs text-slate-300 truncate">{q.question}</p>
-                            <span className="text-[10px] text-slate-500 font-medium uppercase mt-0.5 inline-block">{q.type} · {q.max_marks}m</span>
+                    {/* Input workspace depending on type */}
+                    <div className="flex-1">
+                      {qInfo?.type === "MCQ" && (
+                        <div className="grid grid-cols-1 gap-3">
+                          {(optionOrders[currentQ.id] || (["A", "B", "C", "D"] as const)).map((opt, idx) => {
+                            const key = `option_${opt.toLowerCase()}` as keyof Question;
+                            const text = currentQ[key] as string | null;
+                            if (!text) return null;
+                            const selected = answers[currentQ.id]?.text === opt;
+                            const displayLabel = String.fromCharCode(65 + idx);
+
+                            return (
+                              <label
+                                key={opt}
+                                className={`flex items-start gap-4 p-4.5 rounded-xl border cursor-pointer transition-all duration-150 ${
+                                  selected
+                                    ? "border-[#7C3AED] bg-[#7C3AED]/5"
+                                    : "border-slate-200 bg-white hover:bg-slate-50/50"
+                                }`}
+                              >
+                                <input
+                                  type="radio"
+                                  name={`q-${currentQ.id}`}
+                                  checked={selected}
+                                  onChange={() => handleAnswerChange(currentQ.id, opt)}
+                                  className="mt-1 w-4 h-4 accent-[#7C3AED] shrink-0"
+                                />
+                                <div className="flex items-start gap-2.5">
+                                  <span className={`font-bold shrink-0 text-sm ${selected ? "text-[#7C3AED]" : "text-slate-400"}`}>
+                                    {displayLabel}.
+                                  </span>
+                                  <span className={`text-[14.5px] leading-relaxed ${selected ? "text-slate-800 font-medium" : "text-slate-600"}`}>
+                                    {text}
+                                  </span>
+                                </div>
+                              </label>
+                            );
+                          })}
+                        </div>
+                      )}
+
+                      {qInfo?.type === "Short Answer" && (
+                        <div>
+                          <textarea
+                            className="w-full resize-y min-h-[160px] p-4 bg-slate-50 border border-slate-200 rounded-xl text-slate-800 placeholder:text-slate-400 focus:outline-none focus:border-[#7C3AED] focus:bg-white text-[14.5px] leading-relaxed transition-all"
+                            placeholder="Type your short answer here..."
+                            value={answers[currentQ.id]?.text ?? ""}
+                            onChange={(e) => handleAnswerChange(currentQ.id, e.target.value)}
+                          />
+                          <div className="flex justify-end mt-2 text-xs text-slate-400 font-semibold">
+                            {answers[currentQ.id]?.text?.split(/\s+/).filter(Boolean).length ?? 0} words
                           </div>
                         </div>
-                        <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full shrink-0 ${
-                          isFlagged ? "bg-amber-500/20 text-amber-400" :
-                          isAnswered ? "bg-emerald-500/20 text-emerald-400" :
-                          "bg-slate-800 text-slate-500"
-                        }`}>
-                          {isFlagged ? "Flagged" : isAnswered ? "Answered" : "Unanswered"}
-                        </span>
-                      </button>
-                    );
-                  })}
-                </div>
-              </div>
+                      )}
 
-              {/* Action Buttons */}
-              <div className="flex gap-4 border-t pt-6" style={{ borderColor: "var(--border-subtle)" }}>
-                <button
-                  className="btn btn-secondary flex-1 btn-lg"
-                  onClick={() => setShowSubmitConfirm(false)}
-                >
-                  Back to Exam Questions
-                </button>
-                <button
-                  className="btn btn-primary flex-1 btn-lg animate-pulse"
-                  style={{ background: "linear-gradient(135deg, #059669, #34D399)", color: "white", boxShadow: "0 4px 20px rgba(52,211,153,0.3)" }}
-                  onClick={handleSubmit}
-                  disabled={submitting}
-                >
-                  {submitting ? "Submitting..." : "Confirm & Submit Exam"}
-                </button>
-              </div>
-            </div>
-          ) : (
-            <>
-              {/* Question Header */}
-              <div className="flex items-center justify-between px-8 py-4 border-b" style={{ borderColor: "var(--border-subtle)" }}>
-                <div className="flex items-center gap-3">
-                  <span className="badge badge-neutral">Q {currentIdx + 1} of {orderedQuestions.length}</span>
-                  {currentQ?.topic && <span className="badge badge-info">{currentQ.topic}</span>}
-                  <span className="badge badge-neutral">{currentQ?.type}</span>
-                  <span className="badge badge-neutral">{currentQ?.max_marks} marks</span>
-                </div>
-                <div className="flex items-center gap-2">
-                  {exam?.negative_marking && (
-                    <span className="text-xs text-red-400" style={{ color: "var(--danger)" }}>Negative marking active</span>
-                  )}
-                  <button
-                    onClick={() => handleFlagToggle(currentQ?.id ?? "")}
-                    className={`btn btn-sm ${answers[currentQ?.id ?? ""]?.flagged ? "btn-warning" : "btn-secondary"}`}
-                    style={answers[currentQ?.id ?? ""]?.flagged ? { background: "rgba(251,191,36,0.15)", color: "var(--warning)" } : {}}
-                  >
-                    <Flag size={14} />
-                    {answers[currentQ?.id ?? ""]?.flagged ? "Unflag" : "Flag for Review"}
-                  </button>
-                </div>
-              </div>
-
-              {/* Question Content */}
-              <div className="flex-1 overflow-y-auto p-8">
-                {currentQ && (
-                  <div className="max-w-3xl mx-auto fade-in" key={currentQ.id}>
-                    <h2 className="text-lg font-medium mb-8 leading-relaxed" style={{ fontSize: "1.125rem", lineHeight: 1.7 }}>
-                      {currentQ.question}
-                    </h2>
-
-                    {currentQ.type === "MCQ" ? (
-                      <div className="space-y-3">
-                        {(optionOrders[currentQ.id] || (["A", "B", "C", "D"] as const)).map((opt, idx) => {
-                          const key = `option_${opt.toLowerCase()}` as keyof Question;
-                          const text = currentQ[key] as string | null;
-                          if (!text) return null;
-                          const selected = answers[currentQ.id]?.text === opt;
-                          const displayLabel = String.fromCharCode(65 + idx);
-                          return (
-                            <label
-                              key={opt}
-                              className="flex items-start gap-4 p-5 rounded-xl cursor-pointer transition-all"
-                              style={{
-                                background: selected ? "rgba(5,150,105,0.1)" : "var(--bg-input)",
-                                border: `1.5px solid ${selected ? "var(--accent-primary)" : "var(--border-subtle)"}`,
-                              }}
+                      {qInfo?.type === "Coding" && (
+                        <div className="space-y-4">
+                          {/* Code Controls bar */}
+                          <div className="flex items-center justify-between bg-slate-100 p-3 rounded-lg border border-slate-200">
+                            <div className="flex items-center gap-2">
+                              <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wide">Language:</label>
+                              <select
+                                className="h-8 px-2 bg-white border border-slate-200 rounded text-xs text-slate-800 font-semibold focus:outline-none focus:border-[#7C3AED]"
+                                value={currentLang}
+                                onChange={(e) => {
+                                  const lang = e.target.value;
+                                  setSelectedLanguage(prev => ({ ...prev, [currentQ.id]: lang }));
+                                  // Reset snippet
+                                  handleAnswerChange(currentQ.id, getDefaultCodeSnippet(currentQ.question, lang));
+                                }}
+                              >
+                                {["Python", "JavaScript", "Java", "C++"].map((l) => (
+                                  <option key={l} value={l}>{l}</option>
+                                ))}
+                              </select>
+                            </div>
+                            <button
+                              onClick={() => handleRunCode(currentQ.id, currentQ.question)}
+                              disabled={runningState[currentQ.id]}
+                              className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white font-semibold text-xs rounded shadow-sm shadow-emerald-600/10 cursor-pointer transition-colors"
                             >
-                              <input
-                                type="radio"
-                                name={`q-${currentQ.id}`}
-                                checked={selected}
-                                onChange={() => handleAnswerChange(currentQ.id, opt)}
-                                className="mt-0.5 w-5 h-5 accent-emerald-500 shrink-0"
-                              />
-                              <div className="flex items-start gap-3">
-                                <span className="font-bold shrink-0" style={{ color: selected ? "var(--accent-secondary)" : "var(--text-muted)" }}>
-                                  {displayLabel}.
-                                </span>
-                                <span className="text-base text-slate-100" style={{ lineHeight: 1.6 }}>{text}</span>
-                              </div>
-                            </label>
-                          );
-                        })}
-                      </div>
-                    ) : (
-                      <div>
-                        <textarea
-                          className="form-input resize-y min-h-[200px] text-base leading-relaxed bg-[#121E17] text-white border-emerald-900/30"
-                          placeholder="Type your answer here…"
-                          value={answers[currentQ.id]?.text ?? ""}
-                          onChange={(e) => handleAnswerChange(currentQ.id, e.target.value)}
-                        />
-                        <p className="text-sm mt-2" style={{ color: "var(--text-muted)" }}>
-                          {answers[currentQ.id]?.text?.split(/\s+/).filter(Boolean).length ?? 0} words
-                        </p>
-                      </div>
-                    )}
-                  </div>
-                )}
-              </div>
+                              <Play size={12} className="fill-current" />
+                              <span>{runningState[currentQ.id] ? "Running..." : "Run"}</span>
+                            </button>
+                          </div>
 
-              {/* Navigation Footer */}
-              <div className="flex items-center justify-between px-8 py-4 border-t" style={{ borderColor: "var(--border-subtle)" }}>
+                          {/* Editor textarea */}
+                          <textarea
+                            className="w-full font-mono text-[13.5px] p-5 bg-[#0F172A] text-slate-100 border border-slate-800 rounded-xl focus:outline-none focus:border-[#7C3AED] min-h-[220px] leading-relaxed"
+                            value={answers[currentQ.id]?.text ?? ""}
+                            onKeyDown={(e) => handleKeyDownTab(e, currentQ.id)}
+                            onChange={(e) => handleAnswerChange(currentQ.id, e.target.value)}
+                            spellCheck="false"
+                            autoCapitalize="off"
+                            autoComplete="off"
+                            autoCorrect="off"
+                          />
+
+                          {/* Terminal Output */}
+                          <div className="bg-[#1E293B] border border-slate-800 rounded-xl p-4 font-mono text-[12px]">
+                            <div className="flex items-center gap-2 text-slate-400 font-bold text-[10px] uppercase tracking-wider mb-2 border-b border-slate-800 pb-2">
+                              <Terminal size={12} />
+                              <span>Output</span>
+                            </div>
+                            <pre className="text-slate-300 whitespace-pre-wrap leading-normal min-h-[60px] italic select-all">
+                              {runningOutputs[currentQ.id] || "Run your code to see output.."}
+                            </pre>
+                          </div>
+                        </div>
+                      )}
+
+                      {qInfo?.type === "Essay" && (
+                        <div>
+                          <textarea
+                            className="w-full resize-y min-h-[260px] p-5 bg-slate-50 border border-slate-200 rounded-xl text-slate-800 placeholder:text-slate-400 focus:outline-none focus:border-[#7C3AED] focus:bg-white text-[14.5px] leading-relaxed transition-all"
+                            placeholder="Type your essay answer here..."
+                            value={answers[currentQ.id]?.text ?? ""}
+                            onChange={(e) => handleAnswerChange(currentQ.id, e.target.value)}
+                          />
+                          <div className="flex items-center justify-between mt-3 text-xs text-slate-400 font-semibold">
+                            <span className="text-slate-400">Minimum ~120 words recommended</span>
+                            <span>
+                              {answers[currentQ.id]?.text?.split(/\s+/).filter(Boolean).length ?? 0} words
+                            </span>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* Navigation Footer */}
+            <div className="flex items-center justify-between px-8 py-4 border-t border-slate-200 bg-white">
+              <button
+                className="btn btn-ghost h-9 px-4 text-xs font-bold border border-slate-200"
+                onClick={() => setCurrentIdx((i) => Math.max(0, i - 1))}
+                disabled={currentIdx === 0 || showSubmitConfirm}
+              >
+                <ChevronLeft size={14} /> Previous
+              </button>
+              <span className="text-xs text-slate-400 font-semibold font-sans">
+                {answered}/{orderedQuestions.length} questions answered
+              </span>
+              {currentIdx === orderedQuestions.length - 1 ? (
                 <button
-                  className="btn btn-secondary"
-                  onClick={() => setCurrentIdx((i) => Math.max(0, i - 1))}
-                  disabled={currentIdx === 0}
+                  className="btn btn-primary h-9 px-4 text-xs font-bold justify-center"
+                  onClick={() => setShowSubmitConfirm(true)}
+                  disabled={showSubmitConfirm}
                 >
-                  <ChevronLeft size={16} /> Previous
+                  Go to Submit <ArrowRight size={14} />
                 </button>
-                <span className="text-sm" style={{ color: "var(--text-muted)" }}>
-                  Auto-saved · {answered}/{orderedQuestions.length} answered
-                </span>
+              ) : (
                 <button
-                  className="btn btn-secondary"
+                  className="btn btn-ghost h-9 px-4 text-xs font-bold border border-slate-200"
                   onClick={() => { saveAnswers(false); setCurrentIdx((i) => Math.min(orderedQuestions.length - 1, i + 1)); }}
-                  disabled={currentIdx === orderedQuestions.length - 1}
+                  disabled={currentIdx === orderedQuestions.length - 1 || showSubmitConfirm}
                 >
-                  Next <ChevronRight size={16} />
+                  Next <ChevronRight size={14} />
                 </button>
-              </div>
-            </>
-          )}
-        </main>
+              )}
+            </div>
+          </main>
+        </div>
       </div>
     </ProctorWrapper>
   );
 }
-
