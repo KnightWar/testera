@@ -107,10 +107,10 @@ export default function HomePage() {
       {/* Footer */}
       <footer className="max-w-6xl mx-auto w-full px-6 py-6 border-t border-slate-200/60 z-10 flex flex-col sm:flex-row justify-between items-center gap-3">
         <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">
-          SoCSE ASSESSMENT PORTAL · JUNE 2026
+          SECURE ASSESSMENT AND SKILL ENHANCER SYSTEM
         </p>
         <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">
-          @copyright 2026 - SoCSE, MSU (ID: 724 009)
+          @copyright 2026 - Praveenyam. All Rights Reserved
         </p>
       </footer>
     </div>

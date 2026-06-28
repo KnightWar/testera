@@ -45,6 +45,15 @@ export default function ProctorWrapper({ sessionId, examId, children, onForceSub
   const lastTabSwitchTime = useRef<number>(0);
   const exitCountRef = useRef(0); // keeps sync value for use in callbacks
 
+  // Tracking references for local accumulators (reduces DB write overload under load)
+  const tabSwitchesCountRef = useRef(0);
+  const devtoolsAttemptsCountRef = useRef(0);
+
+  // Tracking last flushed values to database
+  const lastSyncedExitCountRef = useRef(0);
+  const lastSyncedTabSwitchesRef = useRef(0);
+  const lastSyncedDevtoolsRef = useRef(0);
+
   // ── Browser & Device checks ───────────────────────────────────────────────
   useEffect(() => {
     const ua = navigator.userAgent.toLowerCase();
@@ -74,6 +83,7 @@ export default function ProctorWrapper({ sessionId, examId, children, onForceSub
         setShowViolation(false);
 
         if (sessionId) {
+          // Flush violation logs immediately before submit
           const batch = logQueue.current.splice(0);
           if (batch.length > 0) {
             supabase.from("violation_logs").insert(
@@ -83,6 +93,28 @@ export default function ProctorWrapper({ sessionId, examId, children, onForceSub
                 metadata: v.metadata ?? null,
               }))
             );
+          }
+
+          // Flush current stats immediately
+          const updates: any = {};
+          let needsUpdate = false;
+          if (exitCountRef.current !== lastSyncedExitCountRef.current) {
+            updates.fullscreen_exits = exitCountRef.current;
+            lastSyncedExitCountRef.current = exitCountRef.current;
+            needsUpdate = true;
+          }
+          if (tabSwitchesCountRef.current !== lastSyncedTabSwitchesRef.current) {
+            updates.tab_switches = tabSwitchesCountRef.current;
+            lastSyncedTabSwitchesRef.current = tabSwitchesCountRef.current;
+            needsUpdate = true;
+          }
+          if (devtoolsAttemptsCountRef.current !== lastSyncedDevtoolsRef.current) {
+            updates.devtools_attempts = devtoolsAttemptsCountRef.current;
+            lastSyncedDevtoolsRef.current = devtoolsAttemptsCountRef.current;
+            needsUpdate = true;
+          }
+          if (needsUpdate) {
+            supabase.from("sessions").update(updates).eq("id", sessionId);
           }
         }
         if (onForceSubmit) onForceSubmit();
@@ -104,19 +136,45 @@ export default function ProctorWrapper({ sessionId, examId, children, onForceSub
     });
   }, [sessionId, logViolation, supabase, onForceSubmit]);
 
-  // Flush queue to Supabase every 5 seconds
+  // Flush queue and batch update session stats to Supabase every 5 seconds
   useEffect(() => {
     if (!sessionId) return;
     flushTimer.current = setInterval(async () => {
+      // 1. Flush violation logs
       const batch = logQueue.current.splice(0);
-      if (batch.length === 0) return;
-      await supabase.from("violation_logs").insert(
-        batch.map((v) => ({
-          session_id: sessionId,
-          type: v.type,
-          metadata: v.metadata ?? null,
-        }))
-      );
+      if (batch.length > 0) {
+        await supabase.from("violation_logs").insert(
+          batch.map((v) => ({
+            session_id: sessionId,
+            type: v.type,
+            metadata: v.metadata ?? null,
+          }))
+        );
+      }
+
+      // 2. Batch update session stats columns
+      const updates: any = {};
+      let needsUpdate = false;
+
+      if (exitCountRef.current !== lastSyncedExitCountRef.current) {
+        updates.fullscreen_exits = exitCountRef.current;
+        lastSyncedExitCountRef.current = exitCountRef.current;
+        needsUpdate = true;
+      }
+      if (tabSwitchesCountRef.current !== lastSyncedTabSwitchesRef.current) {
+        updates.tab_switches = tabSwitchesCountRef.current;
+        lastSyncedTabSwitchesRef.current = tabSwitchesCountRef.current;
+        needsUpdate = true;
+      }
+      if (devtoolsAttemptsCountRef.current !== lastSyncedDevtoolsRef.current) {
+        updates.devtools_attempts = devtoolsAttemptsCountRef.current;
+        lastSyncedDevtoolsRef.current = devtoolsAttemptsCountRef.current;
+        needsUpdate = true;
+      }
+
+      if (needsUpdate) {
+        await supabase.from("sessions").update(updates).eq("id", sessionId);
+      }
     }, 5000);
     return () => clearInterval(flushTimer.current);
   }, [sessionId, supabase]);
@@ -139,23 +197,6 @@ export default function ProctorWrapper({ sessionId, examId, children, onForceSub
         exitCountRef.current = newCount;
         setFullscreenExitCount(newCount);
 
-        // Update session violation counter
-        if (sessionId) {
-          supabase
-            .from("sessions")
-            .select("fullscreen_exits")
-            .eq("id", sessionId)
-            .single()
-            .then(({ data }: { data: any }) => {
-              if (data) {
-                supabase
-                  .from("sessions")
-                  .update({ fullscreen_exits: (data.fullscreen_exits ?? 0) + 1 })
-                  .eq("id", sessionId);
-              }
-            });
-        }
-
         handlePause(
           (c) => `You exited fullscreen. Warning ${c} of 3. The exam is paused.`,
           "fullscreen_exit",
@@ -177,20 +218,7 @@ export default function ProctorWrapper({ sessionId, examId, children, onForceSub
       if (now - lastTabSwitchTime.current < 2000) return;
       lastTabSwitchTime.current = now;
 
-      // Update database session tab switches counter
-      supabase
-        .from("sessions")
-        .select("tab_switches")
-        .eq("id", sessionId)
-        .single()
-        .then(({ data }) => {
-          if (data) {
-            supabase
-              .from("sessions")
-              .update({ tab_switches: (data.tab_switches ?? 0) + 1 })
-              .eq("id", sessionId);
-          }
-        });
+      tabSwitchesCountRef.current += 1;
 
       handlePause(
         (c) => `Exam Paused: Focus lost or tab minimized (${detail}). Warning ${c} of 3.`,
@@ -285,26 +313,25 @@ export default function ProctorWrapper({ sessionId, examId, children, onForceSub
   // ── DevTools heuristic check ──────────────────────────────────────────────
   useEffect(() => {
     if (!fullscreenGranted || !sessionId) return;
-    const checkInterval = setInterval(() => {
+
+    let lastCheckTime = 0;
+
+    function checkDevTools() {
+      const now = Date.now();
+      if (now - lastCheckTime < 2000) return;
+      lastCheckTime = now;
+
       if (isDevToolsOpen()) {
+        devtoolsAttemptsCountRef.current += 1;
         logViolation("devtools_open", { timestamp: new Date().toISOString() });
-        supabase
-          .from("sessions")
-          .select("devtools_attempts")
-          .eq("id", sessionId)
-          .single()
-          .then(({ data }) => {
-            if (data) {
-              supabase
-                .from("sessions")
-                .update({ devtools_attempts: (data.devtools_attempts ?? 0) + 1 })
-                .eq("id", sessionId);
-            }
-          });
       }
-    }, 3000);
-    return () => clearInterval(checkInterval);
-  }, [fullscreenGranted, sessionId, logViolation, supabase]);
+    }
+
+    checkDevTools();
+
+    window.addEventListener("resize", checkDevTools);
+    return () => window.removeEventListener("resize", checkDevTools);
+  }, [fullscreenGranted, sessionId, logViolation]);
 
   // ── Auto-submitted due to violations ─────────────────────────────────────
   if (forceSubmitted) {

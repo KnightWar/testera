@@ -27,12 +27,12 @@ export default function WebcamProctor({
     if (!videoRef.current || !canvasRef.current) return;
     const video = videoRef.current;
     const canvas = canvasRef.current;
-    canvas.width = 320;
-    canvas.height = 240;
+    canvas.width = 160;
+    canvas.height = 120;
     const ctx = canvas.getContext("2d");
     if (!ctx) return;
 
-    ctx.drawImage(video, 0, 0, 320, 240);
+    ctx.drawImage(video, 0, 0, 160, 120);
     canvas.toBlob(async (blob) => {
       if (!blob) return;
       const path = `webcam/${sessionId}/${Date.now()}.jpg`;
@@ -46,7 +46,7 @@ export default function WebcamProctor({
         await supabase.from("webcam_snapshots").insert({ session_id: sessionId, storage_path: path });
         setSnapshotCount((n) => n + 1);
       }
-    }, "image/jpeg", 0.7);
+    }, "image/jpeg", 0.5);
   }, [sessionId, supabase]);
 
   useEffect(() => {
