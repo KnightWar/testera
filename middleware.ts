@@ -62,14 +62,27 @@ export async function middleware(request: NextRequest) {
     console.error("[middleware] getUser exception:", err);
   }
 
-  // Admin routes require an authenticated Supabase user
-  if (pathname.startsWith("/admin") && pathname !== "/admin/login" && !user) {
-    console.warn(`[middleware] Unauthorized access to ${pathname} — redirecting to landing page`);
-    return NextResponse.redirect(new URL("/", request.url));
+  // Admin routes and APIs require an authenticated user with @socse.edu email
+  const isAdminPath = pathname.startsWith("/admin");
+  const isAdminApi =
+    pathname.startsWith("/api/exams") ||
+    pathname.startsWith("/api/results") ||
+    pathname.startsWith("/api/questions") ||
+    pathname.startsWith("/api/export") ||
+    (pathname.startsWith("/api/grade") && request.method !== "POST");
+
+  if ((isAdminPath || isAdminApi) && pathname !== "/admin/login") {
+    if (!user || !user.email?.endsWith("@socse.edu")) {
+      console.warn(`[middleware] Unauthorized access to ${pathname} — redirecting/rejecting`);
+      if (isAdminApi) {
+        return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+      }
+      return NextResponse.redirect(new URL("/", request.url));
+    }
   }
 
   // Redirect authenticated admin users away from the login page to the dashboard
-  if (pathname === "/admin/login" && user) {
+  if (pathname === "/admin/login" && user && user.email?.endsWith("@socse.edu")) {
     console.log("[middleware] Authenticated user on login page — redirecting to dashboard");
     return NextResponse.redirect(new URL("/admin/dashboard", request.url));
   }
@@ -78,5 +91,12 @@ export async function middleware(request: NextRequest) {
 }
 
 export const config = {
-  matcher: ["/admin/:path*"],
+  matcher: [
+    "/admin/:path*",
+    "/api/exams/:path*",
+    "/api/results/:path*",
+    "/api/questions/:path*",
+    "/api/export/:path*",
+    "/api/grade/:path*",
+  ],
 };

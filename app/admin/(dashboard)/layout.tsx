@@ -18,9 +18,9 @@ export default async function AdminLayout({ children }: { children: React.ReactN
     console.error("[AdminLayout] getUser exception:", err);
   }
 
-  if (!user) {
-    console.warn("[AdminLayout] Unauthorized access in layout — redirecting to /admin/login");
-    redirect("/admin/login");
+  if (!user || !user.email?.endsWith("@socse.edu")) {
+    console.warn("[AdminLayout] Unauthorized access in layout — redirecting to /");
+    redirect("/");
   }
 
   return (
