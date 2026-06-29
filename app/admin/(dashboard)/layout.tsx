@@ -1,5 +1,6 @@
 import { createServerSideClient } from "@/lib/supabase-server";
 import { redirect } from "next/navigation";
+import { cookies } from "next/headers";
 import AdminNav from "@/components/admin/AdminNav";
 import AdminInactivityTimeout from "@/components/admin/AdminInactivityTimeout";
 
@@ -18,8 +19,25 @@ export default async function AdminLayout({ children }: { children: React.ReactN
     console.error("[AdminLayout] getUser exception:", err);
   }
 
-  if (!user || !user.email?.endsWith("@socse.edu")) {
+  const whitelisted = (process.env.AUTHORIZED_ADMINS || "admin1@pravAI.org,admin2@pravAI.org")
+    .split(",")
+    .map(e => e.trim().toLowerCase());
+
+  if (!user || !user.email || !whitelisted.includes(user.email.toLowerCase())) {
     console.warn("[AdminLayout] Unauthorized access in layout — redirecting to /");
+    redirect("/");
+  }
+
+  const cookieStore = await cookies();
+  const clientToken = cookieStore.get("session_token")?.value;
+
+  const { createServiceClient } = await import("@/lib/supabase-server");
+  const serviceClient = createServiceClient();
+  const { data: dbUserData } = await serviceClient.auth.admin.getUserById(user.id);
+  const dbToken = dbUserData?.user?.user_metadata?.session_token;
+
+  if (!clientToken || !dbToken || clientToken !== dbToken) {
+    console.warn("[AdminLayout] Session token mismatch in layout — redirecting to /");
     redirect("/");
   }
 

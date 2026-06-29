@@ -1,20 +1,54 @@
 "use client";
 
+import { useState } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import {
   LayoutDashboard, FileText, Users, Activity,
-  Upload, Settings, BarChart3, LogOut
+  Upload, Settings, BarChart3, LogOut, Shield
 } from "lucide-react";
 import { createClient } from "@/lib/supabase";
 
 export default function AdminNav({ userEmail }: { userEmail: string }) {
   const pathname = usePathname();
   const router = useRouter();
+  const [registering, setRegistering] = useState(false);
 
   // Extract current exam ID from pathname if active inside an exam route
   const match = pathname.match(/\/admin\/exams\/([^\/]+)/);
   const currentExamId = match && match[1] !== "new" ? match[1] : null;
+
+  async function handleRegisterPasskey() {
+    setRegistering(true);
+    try {
+      const optionsRes = await fetch("/api/auth/passkey/register/options");
+      if (!optionsRes.ok) {
+        throw new Error(await optionsRes.text());
+      }
+      const options = await optionsRes.json();
+
+      const { startRegistration } = await import("@simplewebauthn/browser");
+      const registrationResponse = await startRegistration({ optionsJSON: options });
+
+      const verifyRes = await fetch("/api/auth/passkey/register/verify", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(registrationResponse),
+      });
+
+      if (!verifyRes.ok) {
+        const errorData = await verifyRes.json();
+        throw new Error(errorData.error || "Verification failed");
+      }
+
+      alert("Biometric Passkey registered successfully! You can now log in using Face ID / Touch ID on this device.");
+    } catch (err: any) {
+      console.error("Passkey registration failed:", err);
+      alert(`Registration failed: ${err.message || err}`);
+    } finally {
+      setRegistering(false);
+    }
+  }
 
   async function handleLogout() {
     if (typeof window !== "undefined" && !window.confirm("Are you sure you want to sign out?")) {
@@ -128,6 +162,14 @@ export default function AdminNav({ userEmail }: { userEmail: string }) {
             <p className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider">Assesor Admin</p>
           </div>
         </div>
+        <button
+          onClick={handleRegisterPasskey}
+          disabled={registering}
+          className="flex items-center gap-2 w-full px-3 py-2 rounded-md text-xs font-semibold text-slate-500 hover:text-[#E85D04] hover:bg-orange-50 transition-all duration-150 border border-transparent cursor-pointer disabled:opacity-50"
+        >
+          <Shield size={13} />
+          {registering ? "Registering..." : "Register Face ID / Touch ID"}
+        </button>
         <button
           onClick={handleLogout}
           className="flex items-center gap-2 w-full px-3 py-2 rounded-md text-xs font-semibold text-slate-500 hover:text-red-650 hover:bg-red-50 transition-all duration-150 border border-transparent cursor-pointer"

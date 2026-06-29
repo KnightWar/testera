@@ -141,6 +141,35 @@ export default function AdminInactivityTimeout() {
     }
   }, [pathname]);
 
+  // Poll session-check endpoint every 5 seconds to detect concurrent logins
+  useEffect(() => {
+    let active = true;
+
+    const interval = setInterval(async () => {
+      try {
+        const res = await fetch("/api/auth/session-check");
+        if (!res.ok) return;
+        const data = await res.json();
+
+        if (active && !data.active && data.reason === "concurrent_login") {
+          clearInterval(interval);
+          
+          const supabase = createClient();
+          await supabase.auth.signOut();
+          document.cookie = "session_token=; path=/; expires=Thu, 01 Jan 1970 00:00:00 UTC;";
+          window.location.href = "/admin/login?error=concurrent";
+        }
+      } catch (err) {
+        console.error("Concurrent login check error:", err);
+      }
+    }, 5000);
+
+    return () => {
+      active = false;
+      clearInterval(interval);
+    };
+  }, []);
+
   if (!showWarning) return null;
 
   return (

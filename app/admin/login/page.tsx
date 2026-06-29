@@ -11,9 +11,11 @@ export default function AdminLoginPage() {
   const [password, setPassword] = useState("");
   const [showPass, setShowPass] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [bioLoading, setBioLoading] = useState(false);
   const [error, setError] = useState("");
   const [theme, setTheme] = useState<"light" | "dark">("dark");
   const [timeoutActive, setTimeoutActive] = useState(false);
+  const [concurrentActive, setConcurrentActive] = useState(false);
 
   useEffect(() => {
     const saved = localStorage.getItem("theme") as "light" | "dark" | null;
@@ -26,6 +28,9 @@ export default function AdminLoginPage() {
     if (params.get("timeout") === "1") {
       setTimeoutActive(true);
     }
+    if (params.get("error") === "concurrent") {
+      setConcurrentActive(true);
+    }
   }, []);
 
   const toggleTheme = () => {
@@ -35,6 +40,52 @@ export default function AdminLoginPage() {
     document.documentElement.setAttribute("data-theme", nextTheme);
   };
 
+  async function handleBiometricLogin() {
+    setError("");
+    setBioLoading(true);
+    try {
+      const optionsRes = await fetch("/api/auth/passkey/login/options");
+      if (!optionsRes.ok) {
+        throw new Error(await optionsRes.text());
+      }
+      const options = await optionsRes.json();
+
+      const { startAuthentication } = await import("@simplewebauthn/browser");
+      const assertionResponse = await startAuthentication({ optionsJSON: options });
+
+      const verifyRes = await fetch("/api/auth/passkey/login/verify", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(assertionResponse),
+      });
+
+      if (!verifyRes.ok) {
+        const errorData = await verifyRes.json();
+        throw new Error(errorData.error || "Biometric validation failed");
+      }
+
+      const data = await verifyRes.json();
+
+      const supabase = createClient();
+      const { error: sessionError } = await supabase.auth.setSession({
+        access_token: data.session.access_token,
+        refresh_token: data.session.refresh_token,
+      });
+
+      if (sessionError) throw sessionError;
+
+      router.refresh();
+      setTimeout(() => {
+        window.location.href = "/admin/dashboard";
+      }, 200);
+    } catch (err: any) {
+      console.error("Biometric login failed:", err);
+      setError(err.message || "Face ID / Touch ID verification failed.");
+    } finally {
+      setBioLoading(false);
+    }
+  }
+
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     setError("");
@@ -42,13 +93,26 @@ export default function AdminLoginPage() {
 
     try {
       const supabase = createClient();
-      const resolvedEmail = `${email.trim()}@socse.edu`;
+      const resolvedEmail = `${email.trim()}@pravAI.org`;
+
+      const whitelisted = ["admin1@pravai.org", "admin2@pravai.org"];
+      if (!whitelisted.includes(resolvedEmail.toLowerCase())) {
+        setError("Unauthorized administrator account.");
+        setLoading(false);
+        return;
+      }
+
       const { error: authError } = await supabase.auth.signInWithPassword({ email: resolvedEmail, password });
 
       if (authError) {
         setError(authError.message);
         setLoading(false);
       } else {
+        // Generate new session token and update user metadata to prevent concurrent logins
+        const newToken = Math.random().toString(36).substring(2, 15) + Math.random().toString(36).substring(2, 15);
+        await supabase.auth.updateUser({ data: { session_token: newToken } });
+        document.cookie = `session_token=${newToken}; path=/; max-age=86400; SameSite=Lax`;
+
         // Refresh server state so middleware sees the new session cookie,
         // then navigate. Using window.location for a hard redirect ensures
         // cookies are fully flushed before the middleware auth check.
@@ -94,6 +158,15 @@ export default function AdminLoginPage() {
             {timeoutActive && (
               <div className="p-3.5 rounded-md text-xs bg-amber-500/10 text-amber-500 border border-amber-500/20 font-medium leading-relaxed">
                 You have been signed out due to inactivity. Log in again to restore your workspace progress.
+              </div>
+            )}
+
+            {concurrentActive && (
+              <div className="p-3.5 rounded-md text-xs bg-red-500/10 text-red-500 border border-red-500/20 font-medium leading-relaxed flex items-start gap-2.5">
+                <AlertTriangle size={16} className="shrink-0 mt-0.5" />
+                <span>
+                  Concurrent login detected! You have been logged out because this account was logged into on another browser or device.
+                </span>
               </div>
             )}
 
@@ -146,7 +219,7 @@ export default function AdminLoginPage() {
             <button
               type="submit"
               className="btn btn-primary w-full h-10 flex items-center justify-center gap-2 mt-2 cursor-pointer rounded-md font-bold text-sm"
-              disabled={loading}
+              disabled={loading || bioLoading}
             >
               {loading ? (
                 <>
@@ -155,6 +228,29 @@ export default function AdminLoginPage() {
               ) : (
                 <>
                   Sign In <ArrowRight size={14} />
+                </>
+              )}
+            </button>
+
+            <div className="relative flex py-2 items-center">
+              <div className="flex-grow border-t border-[--border] opacity-50"></div>
+              <span className="flex-shrink mx-4 text-[10px] text-[--text-muted] font-bold uppercase tracking-wider">or</span>
+              <div className="flex-grow border-t border-[--border] opacity-50"></div>
+            </div>
+
+            <button
+              type="button"
+              onClick={handleBiometricLogin}
+              disabled={bioLoading || loading}
+              className="w-full h-10 flex items-center justify-center gap-2 border border-[--border] hover:bg-slate-50 cursor-pointer rounded-md font-semibold text-sm transition-colors text-[--text-primary] disabled:opacity-50"
+            >
+              {bioLoading ? (
+                <>
+                  <span className="spinner border-slate-600 animate-spin" /> Scanning Biometrics…
+                </>
+              ) : (
+                <>
+                  <Shield size={16} className="text-[#E85D04]" /> Sign In with Face ID
                 </>
               )}
             </button>

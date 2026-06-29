@@ -37,44 +37,46 @@ const supabase = createClient(supabaseUrl, serviceRoleKey, {
   }
 });
 
-const email = 'admin@socse.edu';
-const password = 'admin123';
+const admins = [
+  { email: 'admin1@pravAI.org', password: 'admin123' },
+  { email: 'admin2@pravAI.org', password: 'admin123' }
+];
 
 async function main() {
-  console.log(`Checking if admin user ${email} exists...`);
-
-  // List users to find the matching email
+  // List users to find existing emails
   const { data: { users }, error: listError } = await supabase.auth.admin.listUsers();
   if (listError) {
     console.error('Error listing users:', listError.message);
     process.exit(1);
   }
 
-  const existingUser = users.find(u => u.email === email);
+  for (const admin of admins) {
+    const existingUser = users.find(u => u.email === admin.email);
 
-  if (existingUser) {
-    console.log(`Found existing user with ID: ${existingUser.id}. Updating password to: ${password}...`);
-    const { error: updateError } = await supabase.auth.admin.updateUserById(existingUser.id, {
-      password: password,
-      email_confirm: true
-    });
-    if (updateError) {
-      console.error('Error updating password:', updateError.message);
-      process.exit(1);
+    if (existingUser) {
+      console.log(`Found existing user: ${admin.email} (ID: ${existingUser.id}). Updating password to ${admin.password}...`);
+      const { error: updateError } = await supabase.auth.admin.updateUserById(existingUser.id, {
+        password: admin.password,
+        email_confirm: true
+      });
+      if (updateError) {
+        console.error(`Error updating password for ${admin.email}:`, updateError.message);
+      } else {
+        console.log(`Success! Password updated for ${admin.email}.`);
+      }
+    } else {
+      console.log(`User ${admin.email} not found. Creating user with password ${admin.password}...`);
+      const { data: createData, error: createError } = await supabase.auth.admin.createUser({
+        email: admin.email,
+        password: admin.password,
+        email_confirm: true
+      });
+      if (createError) {
+        console.error(`Error creating user ${admin.email}:`, createError.message);
+      } else {
+        console.log(`Success! User created: ${admin.email}. ID: ${createData.user.id}`);
+      }
     }
-    console.log('Success! Password updated to admin123.');
-  } else {
-    console.log(`User ${email} not found. Creating user with password: ${password}...`);
-    const { data: createData, error: createError } = await supabase.auth.admin.createUser({
-      email: email,
-      password: password,
-      email_confirm: true
-    });
-    if (createError) {
-      console.error('Error creating user:', createError.message);
-      process.exit(1);
-    }
-    console.log('Success! User created with password admin123. ID:', createData.user.id);
   }
   process.exit(0);
 }

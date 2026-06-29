@@ -2,6 +2,8 @@ import type { NextRequest } from "next/server";
 import { NextResponse } from "next/server";
 import { createServerClient } from "@supabase/ssr";
 
+import { createServiceClient } from "@/lib/supabase-server";
+
 // ⚠️  Force Node.js runtime — Edge runtime lacks crypto APIs used by @supabase/ssr
 export const runtime = "nodejs";
 
@@ -62,7 +64,9 @@ export async function middleware(request: NextRequest) {
     console.error("[middleware] getUser exception:", err);
   }
 
-  // Admin routes and APIs require an authenticated user with @socse.edu email
+  const authorizedAdminsEnv = process.env.AUTHORIZED_ADMINS || "admin1@pravAI.org,admin2@pravAI.org";
+  const whitelistedAdmins = authorizedAdminsEnv.split(",").map(e => e.trim().toLowerCase());
+
   const isAdminPath = pathname.startsWith("/admin");
   const isAdminApi =
     pathname.startsWith("/api/exams") ||
@@ -72,17 +76,38 @@ export async function middleware(request: NextRequest) {
     (pathname.startsWith("/api/grade") && request.method !== "POST");
 
   if ((isAdminPath || isAdminApi) && pathname !== "/admin/login") {
-    if (!user || !user.email?.endsWith("@socse.edu")) {
+    // 1. Check if user is logged in and whitelisted
+    const userEmail = user?.email?.toLowerCase();
+    if (!user || !userEmail || !whitelistedAdmins.includes(userEmail)) {
       console.warn(`[middleware] Unauthorized access to ${pathname} — redirecting/rejecting`);
       if (isAdminApi) {
         return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
       }
       return NextResponse.redirect(new URL("/", request.url));
     }
+
+    // 2. Single Session check: compare client session_token cookie with Supabase user metadata
+    const clientToken = request.cookies.get("session_token")?.value;
+    
+    // Fetch fresh user record directly from database to avoid stale JWT cache issues
+    const serviceClient = createServiceClient();
+    const { data: dbUserData } = await serviceClient.auth.admin.getUserById(user.id);
+    const dbToken = dbUserData?.user?.user_metadata?.session_token;
+
+    if (!clientToken || !dbToken || clientToken !== dbToken) {
+      console.warn(`[middleware] Concurrent login detected or missing token for ${userEmail} — redirecting/rejecting`);
+      
+      const response = isAdminApi 
+        ? NextResponse.json({ error: "Session expired due to concurrent login." }, { status: 401 })
+        : NextResponse.redirect(new URL("/", request.url));
+      
+      response.cookies.delete("session_token");
+      return response;
+    }
   }
 
   // Redirect authenticated admin users away from the login page to the dashboard
-  if (pathname === "/admin/login" && user && user.email?.endsWith("@socse.edu")) {
+  if (pathname === "/admin/login" && user && whitelistedAdmins.includes(user?.email?.toLowerCase() ?? "")) {
     console.log("[middleware] Authenticated user on login page — redirecting to dashboard");
     return NextResponse.redirect(new URL("/admin/dashboard", request.url));
   }
