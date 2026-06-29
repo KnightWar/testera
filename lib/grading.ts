@@ -79,9 +79,9 @@ export async function gradeWithAI(
   studentAnswer: string,
   maxMarks: number
 ): Promise<AIGradeResult> {
-  const apiKey = process.env.ANTHROPIC_API_KEY;
+  const apiKey = process.env.GEMINI_API_KEY;
   if (!apiKey) {
-    throw new Error("ANTHROPIC_API_KEY not configured");
+    throw new Error("GEMINI_API_KEY not configured");
   }
 
   const prompt = `You are an impartial academic exam evaluator for the Department of SoCSE.
@@ -95,33 +95,43 @@ Student's Answer: ${studentAnswer}
 Maximum Marks: ${maxMarks}
 
 Evaluate the student's answer strictly based on accuracy, completeness, and relevance.
-Respond ONLY in this JSON format (no other text):
+Respond ONLY in this JSON format (do not wrap in markdown codeblocks):
 {
   "score": <number between 0 and ${maxMarks}>,
   "feedback": "<concise feedback in 1-2 sentences>",
   "confidence": "<high|medium|low>"
 }`;
 
-  const response = await fetch("https://api.anthropic.com/v1/messages", {
-    method: "POST",
-    headers: {
-      "x-api-key": apiKey,
-      "anthropic-version": "2023-06-01",
-      "content-type": "application/json",
-    },
-    body: JSON.stringify({
-      model: "claude-haiku-4-5",
-      max_tokens: 256,
-      messages: [{ role: "user", content: prompt }],
-    }),
-  });
+  const response = await fetch(
+    `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`,
+    {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        contents: [
+          {
+            parts: [
+              {
+                text: prompt,
+              },
+            ],
+          },
+        ],
+        generationConfig: {
+          responseMimeType: "application/json",
+        },
+      }),
+    }
+  );
 
   if (!response.ok) {
-    throw new Error(`Claude API error: ${response.status}`);
+    throw new Error(`Gemini API error: ${response.status} ${await response.text()}`);
   }
 
   const data = await response.json();
-  const text = data.content?.[0]?.text ?? "{}";
+  const text = data.candidates?.[0]?.content?.parts?.[0]?.text ?? "{}";
 
   try {
     const parsed = JSON.parse(text) as AIGradeResult;
@@ -129,7 +139,7 @@ Respond ONLY in this JSON format (no other text):
     parsed.score = Math.max(0, Math.min(maxMarks, Number(parsed.score)));
     return parsed;
   } catch {
-    throw new Error("Failed to parse AI response");
+    throw new Error("Failed to parse AI response: " + text);
   }
 }
 

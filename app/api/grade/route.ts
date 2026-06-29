@@ -25,14 +25,13 @@ export async function POST(req: NextRequest) {
     const { data: questions } = await supabase.from("questions").select("*").in("id", questionIds);
 
     const questionMap = new Map((questions ?? []).map((q) => [q.id, q]));
-    const gradedScores: any[] = [];
-
-    for (const answer of answers ?? []) {
+    const gradedScores = await Promise.all((answers ?? []).map(async (answer) => {
       const question = questionMap.get(answer.question_id);
-      if (!question) continue;
+      if (!question) return null;
 
       let marksAwarded = 0;
       let gradedBy: "auto" | "admin" | "ai" = "auto";
+      let aiFeedback: string | null = null;
 
       if (question.type === "MCQ") {
         marksAwarded = gradeMCQ(
@@ -43,8 +42,24 @@ export async function POST(req: NextRequest) {
           exam.negative_fraction ?? 0.25
         );
       } else if (question.type === "Subjective") {
-        // Use keyword rubric if configured
-        if (question.keywords && Array.isArray(question.keywords) && question.keywords.length > 0) {
+        // AI grade if model answer (option_a) is provided
+        if (question.option_a && question.option_a.trim()) {
+          try {
+            const result = await gradeWithAI(
+              question.question,
+              question.option_a,
+              answer.answer_text ?? "",
+              question.max_marks
+            );
+            marksAwarded = result.score;
+            gradedBy = "ai";
+            aiFeedback = result.feedback;
+          } catch (e) {
+            console.error("AI auto-grading failed during submit:", e);
+            marksAwarded = 0;
+            gradedBy = "admin";
+          }
+        } else if (question.keywords && Array.isArray(question.keywords) && question.keywords.length > 0) {
           const result = gradeByKeywords(answer.answer_text, question.keywords, question.max_marks);
           marksAwarded = result.totalMarks;
           gradedBy = "auto";
@@ -55,22 +70,25 @@ export async function POST(req: NextRequest) {
         }
       }
 
-      gradedScores.push({
+      return {
         session_id,
         question_id: answer.question_id,
         marks_awarded: marksAwarded,
         graded_by: gradedBy,
-      });
-    }
+        ai_feedback: aiFeedback,
+      };
+    }));
+
+    const validScores = gradedScores.filter(Boolean) as any[];
 
     // Upsert all scores
-    if (gradedScores.length > 0) {
-      await supabase.from("scores").upsert(gradedScores, { onConflict: "session_id,question_id" });
+    if (validScores.length > 0) {
+      await supabase.from("scores").upsert(validScores, { onConflict: "session_id,question_id" });
     }
 
-    const total = gradedScores.reduce((s, g) => s + g.marks_awarded, 0);
+    const total = validScores.reduce((s, g) => s + g.marks_awarded, 0);
 
-    return NextResponse.json({ grades: gradedScores, total });
+    return NextResponse.json({ grades: validScores, total });
   } catch (err) {
     console.error(err);
     return NextResponse.json({ error: "Grading failed" }, { status: 500 });
@@ -100,13 +118,18 @@ export async function PUT(req: NextRequest) {
       questionRes.data.max_marks
     );
 
-    await supabase.from("scores").upsert({
-      session_id,
-      question_id,
-      marks_awarded: result.score,
-      graded_by: "ai",
-      ai_feedback: result.feedback,
-    }, { onConflict: "session_id,question_id" });
+    await Promise.all([
+      supabase.from("scores").upsert({
+        session_id,
+        question_id,
+        marks_awarded: result.score,
+        graded_by: "ai",
+        ai_feedback: result.feedback,
+      }, { onConflict: "session_id,question_id" }),
+      supabase.from("questions").update({
+        option_a: model_answer
+      }).eq("id", question_id)
+    ]);
 
     return NextResponse.json(result);
   } catch (err: any) {

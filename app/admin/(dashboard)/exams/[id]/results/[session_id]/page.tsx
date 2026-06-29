@@ -84,6 +84,15 @@ export default function SessionDetailPage({
         marks[sc.question_id] = String(sc.marks_awarded);
       }
       setLocalMarks(marks);
+
+      // Populate model answers from question.option_a
+      const modelAnss: Record<string, string> = {};
+      for (const q of data.questions as Question[]) {
+        if (q.type === "Subjective" && q.option_a) {
+          modelAnss[q.id] = q.option_a;
+        }
+      }
+      setModelAnswers(modelAnss);
     }
     if (examRes.ok) {
       const d = await examRes.json();
@@ -156,6 +165,9 @@ export default function SessionDetailPage({
         if (existing) return prev.map((s) => s.question_id === question.id ? { ...s, marks_awarded: data.score, graded_by: "ai", ai_feedback: data.feedback } : s);
         return [...prev, { question_id: question.id, marks_awarded: data.score, graded_by: "ai", ai_feedback: data.feedback }];
       });
+      setQuestions((prev) =>
+        prev.map((q) => (q.id === question.id ? { ...q, option_a: model } : q))
+      );
       setLocalMarks((p) => ({ ...p, [question.id]: String(data.score) }));
       setGlobalMsg({ type: "success", text: `AI graded Q${question.q_no}: ${data.score}/${question.max_marks}` });
     } catch (err: any) {
@@ -198,7 +210,7 @@ export default function SessionDetailPage({
   const pct = tp > 0 ? ((ts / tp) * 100).toFixed(1) : "N/A";
 
   return (
-    <div className="max-w-5xl mx-auto space-y-6 fade-in text-[#F1F5F9] pb-16">
+    <div className="max-w-5xl mx-auto space-y-6 fade-in text-[--text-primary] pb-16">
       {/* Header */}
       <div className="flex items-center justify-between gap-4 flex-wrap">
         <div className="flex items-center gap-3">

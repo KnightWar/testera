@@ -39,6 +39,25 @@
   /* Layout */
   --sidebar-w:  220px;
   --header-h:   56px;
+
+  /* Custom theme mapping variables */
+  --text-1: var(--text-primary);
+  --text-2: var(--text-secondary);
+  --text-3: var(--text-muted);
+  --text-accent: var(--accent);
+  --border-base: var(--border);
+  --border-dim: var(--border);
+  --border-subtle: var(--border);
+  --bg-elevated: var(--bg-surface);
+  --accent-primary: var(--accent);
+  --accent-secondary: var(--secondary);
+}
+
+.glass-card {
+  background: var(--bg-surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
 }
 
 *, *::before, *::after { box-sizing: border-box; }
