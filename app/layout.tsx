@@ -17,9 +17,9 @@ export default function RootLayout({
 }) {
   return (
     <html lang="en">
-        <script
-          dangerouslySetInnerHTML={{
-            __html: `
+      <script
+        dangerouslySetInnerHTML={{
+          __html: `
               window.addEventListener("error", function(e) {
                 if (e.message && (
                   e.message.indexOf("ChunkLoadError") !== -1 ||
@@ -37,9 +37,8 @@ export default function RootLayout({
                 }
               });
             `
-          }}
-        />
-      </head>
+        }}
+      />
       <body className="min-h-screen antialiased">
         {children}
       </body>
