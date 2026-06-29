@@ -192,6 +192,21 @@ export default function StudentExamPage({ params }: { params: Promise<{ id: stri
     if (!session) return;
 
     async function load() {
+      // 1. Fetch latest session state to verify not already submitted
+      const { data: dbSession, error: dbSessionErr } = await supabase
+        .from("sessions")
+        .select("submitted_at")
+        .eq("id", session!.id)
+        .single();
+
+      if (dbSessionErr || !dbSession || dbSession.submitted_at) {
+        console.warn("Session is already submitted, redirecting to landing page.");
+        sessionStorage.removeItem("testera_session");
+        sessionStorage.removeItem("testera_roll");
+        router.push("/");
+        return;
+      }
+
       const [examRes, questionsRes, answersRes] = await Promise.all([
         supabase.from("exams").select("id,title,duration_mins,negative_marking").eq("id", session!.exam_id).single(),
         supabase.from("questions").select("*").eq("exam_id", session!.exam_id),

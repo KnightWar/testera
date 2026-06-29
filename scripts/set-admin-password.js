@@ -42,7 +42,7 @@ const password = 'admin123';
 
 async function main() {
   console.log(`Checking if admin user ${email} exists...`);
-  
+
   // List users to find the matching email
   const { data: { users }, error: listError } = await supabase.auth.admin.listUsers();
   if (listError) {
