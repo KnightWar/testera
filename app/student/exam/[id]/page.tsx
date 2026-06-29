@@ -177,11 +177,10 @@ export default function StudentExamPage({ params }: { params: Promise<{ id: stri
   const [runningState, setRunningState] = useState<{ [qId: string]: boolean }>({});
   const [runningOutputs, setRunningOutputs] = useState<{ [qId: string]: string }>({});
 
-  // Load session from sessionStorage
   useEffect(() => {
     const raw = sessionStorage.getItem("testera_session");
     if (!raw) {
-      router.push("/student/login");
+      router.push("/");
       return;
     }
     const sessionData = JSON.parse(raw) as StudentSession;

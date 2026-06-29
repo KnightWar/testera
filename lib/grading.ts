@@ -84,11 +84,15 @@ export async function gradeWithAI(
     throw new Error("GEMINI_API_KEY not configured");
   }
 
+  const markingSchemePrompt = modelAnswer && modelAnswer.trim()
+    ? `Model Answer / Marking Scheme: ${modelAnswer}`
+    : `Model Answer / Marking Scheme: [No reference model answer provided. Grade the response purely on standard accuracy, completeness, and conceptual correctness for the question subject.]`;
+
   const prompt = `You are an impartial academic exam evaluator for the Department of SoCSE.
 
 Question: ${question}
 
-Model Answer / Marking Scheme: ${modelAnswer}
+${markingSchemePrompt}
 
 Student's Answer: ${studentAnswer}
 

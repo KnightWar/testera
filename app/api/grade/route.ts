@@ -42,31 +42,27 @@ export async function POST(req: NextRequest) {
           exam.negative_fraction ?? 0.25
         );
       } else if (question.type === "Subjective") {
-        // AI grade if model answer (option_a) is provided
-        if (question.option_a && question.option_a.trim()) {
-          try {
-            const result = await gradeWithAI(
-              question.question,
-              question.option_a,
-              answer.answer_text ?? "",
-              question.max_marks
-            );
-            marksAwarded = result.score;
-            gradedBy = "ai";
-            aiFeedback = result.feedback;
-          } catch (e) {
-            console.error("AI auto-grading failed during submit:", e);
+        try {
+          const result = await gradeWithAI(
+            question.question,
+            question.option_a ?? "",
+            answer.answer_text ?? "",
+            question.max_marks
+          );
+          marksAwarded = result.score;
+          gradedBy = "ai";
+          aiFeedback = result.feedback;
+        } catch (e) {
+          console.error("AI auto-grading failed during submit:", e);
+          if (question.keywords && Array.isArray(question.keywords) && question.keywords.length > 0) {
+            const result = gradeByKeywords(answer.answer_text, question.keywords, question.max_marks);
+            marksAwarded = result.totalMarks;
+            gradedBy = "auto";
+          } else {
+            // No rubric — leave for manual grading (0 for now)
             marksAwarded = 0;
             gradedBy = "admin";
           }
-        } else if (question.keywords && Array.isArray(question.keywords) && question.keywords.length > 0) {
-          const result = gradeByKeywords(answer.answer_text, question.keywords, question.max_marks);
-          marksAwarded = result.totalMarks;
-          gradedBy = "auto";
-        } else {
-          // No rubric — leave for manual grading (0 for now)
-          marksAwarded = 0;
-          gradedBy = "admin";
         }
       }
 

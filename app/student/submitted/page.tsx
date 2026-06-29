@@ -1,10 +1,18 @@
+"use client";
+
+import { useEffect } from "react";
 import Link from "next/link";
 import { CheckCircle2, Home, GraduationCap } from "lucide-react";
-import type { Metadata } from "next";
-
-export const metadata: Metadata = { title: "Exam Submitted" };
 
 export default function SubmittedPage() {
+  useEffect(() => {
+    document.title = "Exam Submitted";
+    if (typeof window !== "undefined") {
+      sessionStorage.removeItem("testera_session");
+      sessionStorage.removeItem("testera_roll");
+    }
+  }, []);
+
   return (
     <div className="min-h-screen bg-[--bg-base] text-[--text-primary]">
       <main className="min-h-screen flex items-center justify-center px-4">
@@ -21,7 +29,7 @@ export default function SubmittedPage() {
             <GraduationCap size={16} className="inline mr-1 text-[--accent]" />
             Department of SoCSE · Testera Examination System
           </div>
-          <Link href="/student/login" className="btn btn-ghost w-full">
+          <Link href="/" className="btn btn-ghost w-full">
             <Home size={16} /> Return to Portal
           </Link>
         </div>

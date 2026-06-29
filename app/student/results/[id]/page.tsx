@@ -54,6 +54,12 @@ export default function StudentResultsPage({ params }: { params: Promise<{ id: s
   const [scores, setScores] = useState<Score[]>([]);
   const [examTitle, setExamTitle] = useState("");
 
+  const handleExit = useCallback(() => {
+    sessionStorage.removeItem("testera_session");
+    sessionStorage.removeItem("testera_roll");
+    router.push("/");
+  }, [router]);
+
   const loadData = useCallback(async (sessionId: string) => {
     try {
       const [sessRes, examRes] = await Promise.all([
@@ -100,8 +106,7 @@ export default function StudentResultsPage({ params }: { params: Promise<{ id: s
     // 2. Safety fallback - find session via roll number
     const rollNo = sessionStorage.getItem("testera_roll");
     if (!rollNo) {
-      setErrorMsg("Student session not found. Please log in again.");
-      setLoading(false);
+      router.push("/");
       return;
     }
 
@@ -184,9 +189,9 @@ export default function StudentResultsPage({ params }: { params: Promise<{ id: s
               <p className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider mt-0.5">Results Portal</p>
             </div>
           </div>
-          <Link href="/student/login" className="btn btn-ghost text-xs px-3 py-1.5 h-8 flex items-center gap-1.5 border border-slate-200">
+          <button onClick={handleExit} className="btn btn-ghost text-xs px-3 py-1.5 h-8 flex items-center gap-1.5 border border-slate-200 cursor-pointer">
             <ArrowLeft size={13} /> Exit Portal
-          </Link>
+          </button>
         </div>
       </header>
 

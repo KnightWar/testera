@@ -64,8 +64,8 @@ export async function middleware(request: NextRequest) {
 
   // Admin routes require an authenticated Supabase user
   if (pathname.startsWith("/admin") && pathname !== "/admin/login" && !user) {
-    console.warn(`[middleware] Unauthorized access to ${pathname} — redirecting to login`);
-    return NextResponse.redirect(new URL("/admin/login", request.url));
+    console.warn(`[middleware] Unauthorized access to ${pathname} — redirecting to landing page`);
+    return NextResponse.redirect(new URL("/", request.url));
   }
 
   // Redirect authenticated admin users away from the login page to the dashboard

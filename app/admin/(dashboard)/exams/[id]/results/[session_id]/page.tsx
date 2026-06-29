@@ -146,11 +146,7 @@ export default function SessionDetailPage({
   }
 
   async function handleAIGrade(question: Question) {
-    const model = modelAnswers[question.id];
-    if (!model?.trim()) {
-      setGlobalMsg({ type: "error", text: `Please enter a model answer for Q${question.q_no} before triggering AI grade.` });
-      return;
-    }
+    const model = modelAnswers[question.id] || "";
     setAiLoadingIds((p) => new Set(p).add(question.id));
     try {
       const res = await fetch("/api/grade", {
