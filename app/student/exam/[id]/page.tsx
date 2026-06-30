@@ -44,6 +44,105 @@ interface AnswerMap {
   [questionId: string]: { text: string; flagged: boolean };
 }
 
+function detectQuestionCategory(q: Question): "programming" | "grammar" | "normal" {
+  const text = (q.question || "").toLowerCase();
+  const topic = (q.topic || "").toLowerCase();
+
+  const isProgramming =
+    topic.includes("coding") ||
+    topic.includes("program") ||
+    topic.includes("code") ||
+    topic.includes("java") ||
+    topic.includes("python") ||
+    topic.includes("c++") ||
+    topic.includes("javascript") ||
+    topic.includes("sql") ||
+    text.includes("```") ||
+    text.includes("function") ||
+    text.includes("class ") ||
+    text.includes("def ") ||
+    text.includes("public static") ||
+    text.includes("pointer") ||
+    text.includes("time complexity");
+
+  if (isProgramming) return "programming";
+
+  const isGrammar =
+    topic.includes("grammar") ||
+    topic.includes("english") ||
+    topic.includes("tense") ||
+    topic.includes("preposition") ||
+    text.includes("fill in the blank") ||
+    text.includes("correct the sentence") ||
+    text.includes("parts of speech") ||
+    text.includes("synonym") ||
+    text.includes("antonym") ||
+    text.includes("preposition") ||
+    text.includes("conjunction");
+
+  if (isGrammar) return "grammar";
+
+  return "normal";
+}
+
+function renderQuestionText(questionText: string, category: "programming" | "grammar" | "normal") {
+  if (category === "programming") {
+    // Split by markdown code blocks if any
+    const parts = questionText.split(/(```[\s\S]*?```)/g);
+    return (
+      <div className="space-y-3 font-sans text-slate-800">
+        {parts.map((part, index) => {
+          if (part.startsWith("```") && part.endsWith("```")) {
+            const lines = part.slice(3, -3).trim().split("\n");
+            let lang = "code";
+            let code = part.slice(3, -3).trim();
+            if (lines.length > 0 && !lines[0].includes(" ") && lines[0].length < 15) {
+              lang = lines[0];
+              code = lines.slice(1).join("\n");
+            }
+            return (
+              <div key={index} className="rounded-xl overflow-hidden border border-slate-800 bg-[#0F172A] shadow-md my-4">
+                <div className="bg-[#1E293B] px-4 py-2 border-b border-slate-800 flex justify-between items-center text-[10px] text-slate-400 font-mono font-bold uppercase tracking-wider select-none">
+                  <span>{lang}</span>
+                  <span className="text-slate-500">Read-Only Code Segment</span>
+                </div>
+                <pre className="p-4 overflow-x-auto text-slate-200 font-mono text-[12.5px] leading-relaxed">
+                  <code>{code}</code>
+                </pre>
+              </div>
+            );
+          }
+          return <p key={index} className="leading-relaxed text-sm font-semibold">{part}</p>;
+        })}
+      </div>
+    );
+  }
+
+  if (category === "grammar") {
+    const parts = questionText.split(/(__+)/g);
+    return (
+      <p className="font-serif text-[17px] text-slate-800 leading-loose">
+        {parts.map((part, index) => {
+          if (part.startsWith("_")) {
+            return (
+              <span key={index} className="inline-block border-b-2 border-[#7C3AED] px-4 mx-1 min-w-[60px] text-center font-bold text-[#7C3AED] select-none">
+                &nbsp;&nbsp;
+              </span>
+            );
+          }
+          return <span key={index}>{part}</span>;
+        })}
+      </p>
+    );
+  }
+
+  return (
+    <p className="font-sans text-[15.5px] font-bold text-slate-800 leading-relaxed">
+      {questionText}
+    </p>
+  );
+}
+
 function getQuestionTypeLabel(q: Question): { type: "MCQ" | "Short Answer" | "Coding" | "Essay"; label: string } {
   if (q.type === "MCQ") {
     return { type: "MCQ", label: "Multiple Choice" };
@@ -185,6 +284,29 @@ export default function StudentExamPage({ params }: { params: Promise<{ id: stri
     }
     const sessionData = JSON.parse(raw) as StudentSession;
     setSession(sessionData);
+  }, []);
+
+  // Block copy, paste, cut, contextmenu, drag, and drop events to prevent cheating
+  useEffect(() => {
+    const preventAction = (e: Event) => {
+      e.preventDefault();
+    };
+
+    document.addEventListener("copy", preventAction);
+    document.addEventListener("cut", preventAction);
+    document.addEventListener("paste", preventAction);
+    document.addEventListener("contextmenu", preventAction);
+    document.addEventListener("dragstart", preventAction);
+    document.addEventListener("drop", preventAction);
+
+    return () => {
+      document.removeEventListener("copy", preventAction);
+      document.removeEventListener("cut", preventAction);
+      document.removeEventListener("paste", preventAction);
+      document.removeEventListener("contextmenu", preventAction);
+      document.removeEventListener("dragstart", preventAction);
+      document.removeEventListener("drop", preventAction);
+    };
   }, []);
 
   // Load exam + questions + answers
@@ -657,9 +779,7 @@ export default function StudentExamPage({ params }: { params: Promise<{ id: stri
 
                     {/* Question text */}
                     <div className="mb-8">
-                      <h2 className="text-lg font-bold text-slate-800 leading-relaxed font-sans">
-                        {currentQ?.question}
-                      </h2>
+                      {currentQ && renderQuestionText(currentQ.question, detectQuestionCategory(currentQ))}
                     </div>
 
                     {/* Input workspace depending on type */}
@@ -703,19 +823,80 @@ export default function StudentExamPage({ params }: { params: Promise<{ id: stri
                         </div>
                       )}
 
-                      {qInfo?.type === "Short Answer" && (
-                        <div>
-                          <textarea
-                            className="w-full resize-y min-h-[160px] p-4 bg-slate-50 border border-slate-200 rounded-xl text-slate-800 placeholder:text-slate-400 focus:outline-none focus:border-[#7C3AED] focus:bg-white text-[14.5px] leading-relaxed transition-all"
-                            placeholder="Type your short answer here..."
-                            value={answers[currentQ.id]?.text ?? ""}
-                            onChange={(e) => handleAnswerChange(currentQ.id, e.target.value)}
-                          />
-                          <div className="flex justify-end mt-2 text-xs text-slate-400 font-semibold">
-                            {answers[currentQ.id]?.text?.split(/\s+/).filter(Boolean).length ?? 0} words
+                      {qInfo?.type === "Short Answer" && (() => {
+                        const cat = detectQuestionCategory(currentQ);
+                        if (cat === "programming") {
+                          return (
+                            <div>
+                              <div className="flex bg-[#0F172A] border border-slate-800 rounded-xl focus-within:border-[#7C3AED] overflow-hidden min-h-[180px]">
+                                <div className="bg-[#1E293B] text-slate-500 font-mono text-[12.5px] px-3.5 py-4 select-none text-right border-r border-slate-800 leading-relaxed shrink-0">
+                                  {Array.from({ length: Math.max(6, (answers[currentQ.id]?.text ?? "").split("\n").length) }).map((_, i) => (
+                                    <div key={i}>{i + 1}</div>
+                                  ))}
+                                </div>
+                                <textarea
+                                  className="flex-1 w-full font-mono text-[13.5px] p-4 bg-transparent text-slate-100 border-none outline-none focus:ring-0 resize-y min-h-[160px] leading-relaxed overflow-y-auto"
+                                  placeholder="// Write your code/solution here..."
+                                  value={answers[currentQ.id]?.text ?? ""}
+                                  onKeyDown={(e) => handleKeyDownTab(e, currentQ.id)}
+                                  onChange={(e) => handleAnswerChange(currentQ.id, e.target.value)}
+                                  spellCheck="false"
+                                  autoCapitalize="off"
+                                  autoComplete="off"
+                                  autoCorrect="off"
+                                  data-gramm="false"
+                                  data-enable-grammarly="false"
+                                />
+                              </div>
+                              <div className="flex justify-end mt-2 text-xs text-slate-400 font-semibold">
+                                {answers[currentQ.id]?.text?.split(/\s+/).filter(Boolean).length ?? 0} words
+                              </div>
+                            </div>
+                          );
+                        }
+
+                        if (cat === "grammar") {
+                          return (
+                            <div>
+                              <textarea
+                                className="w-full resize-y min-h-[160px] p-4 bg-[#FAF8F5] border border-[#E6E2D8] rounded-xl text-slate-800 placeholder:text-slate-400 focus:outline-none focus:border-[#7C3AED] focus:bg-white text-[15.5px] leading-relaxed transition-all shadow-inner font-serif"
+                                placeholder="Write your response here. Focus on precise sentence structure, vocabulary, and grammar rules..."
+                                value={answers[currentQ.id]?.text ?? ""}
+                                onChange={(e) => handleAnswerChange(currentQ.id, e.target.value)}
+                                spellCheck="false"
+                                autoCapitalize="off"
+                                autoComplete="off"
+                                autoCorrect="off"
+                                data-gramm="false"
+                                data-enable-grammarly="false"
+                              />
+                              <div className="flex justify-end mt-2 text-xs text-slate-400 font-semibold">
+                                {answers[currentQ.id]?.text?.split(/\s+/).filter(Boolean).length ?? 0} words
+                              </div>
+                            </div>
+                          );
+                        }
+
+                        return (
+                          <div>
+                            <textarea
+                              className="w-full resize-y min-h-[160px] p-4 bg-slate-50 border border-slate-200 rounded-xl text-slate-800 placeholder:text-slate-400 focus:outline-none focus:border-[#7C3AED] focus:bg-white text-[14.5px] leading-relaxed transition-all font-sans"
+                              placeholder="Type your answer here..."
+                              value={answers[currentQ.id]?.text ?? ""}
+                              onChange={(e) => handleAnswerChange(currentQ.id, e.target.value)}
+                              spellCheck="false"
+                              autoCapitalize="off"
+                              autoComplete="off"
+                              autoCorrect="off"
+                              data-gramm="false"
+                              data-enable-grammarly="false"
+                            />
+                            <div className="flex justify-end mt-2 text-xs text-slate-400 font-semibold">
+                              {answers[currentQ.id]?.text?.split(/\s+/).filter(Boolean).length ?? 0} words
+                            </div>
                           </div>
-                        </div>
-                      )}
+                        );
+                      })()}
 
                       {qInfo?.type === "Coding" && (
                         <div className="space-y-4">
@@ -748,17 +929,26 @@ export default function StudentExamPage({ params }: { params: Promise<{ id: stri
                             </button>
                           </div>
 
-                          {/* Editor textarea */}
-                          <textarea
-                            className="w-full font-mono text-[13.5px] p-5 bg-[#0F172A] text-slate-100 border border-slate-800 rounded-xl focus:outline-none focus:border-[#7C3AED] min-h-[220px] leading-relaxed"
-                            value={answers[currentQ.id]?.text ?? ""}
-                            onKeyDown={(e) => handleKeyDownTab(e, currentQ.id)}
-                            onChange={(e) => handleAnswerChange(currentQ.id, e.target.value)}
-                            spellCheck="false"
-                            autoCapitalize="off"
-                            autoComplete="off"
-                            autoCorrect="off"
-                          />
+                          {/* Editor textarea with dynamic line numbers */}
+                          <div className="flex bg-[#0F172A] border border-slate-800 rounded-xl focus-within:border-[#7C3AED] overflow-hidden min-h-[240px]">
+                            <div className="bg-[#1E293B] text-slate-500 font-mono text-[12.5px] px-3.5 py-5 select-none text-right border-r border-slate-800 leading-relaxed shrink-0">
+                              {Array.from({ length: Math.max(10, (answers[currentQ.id]?.text ?? "").split("\n").length) }).map((_, i) => (
+                                <div key={i}>{i + 1}</div>
+                              ))}
+                            </div>
+                            <textarea
+                              className="flex-1 w-full font-mono text-[13.5px] p-5 bg-transparent text-slate-100 border-none outline-none focus:ring-0 resize-y min-h-[220px] leading-relaxed overflow-y-auto"
+                              value={answers[currentQ.id]?.text ?? ""}
+                              onKeyDown={(e) => handleKeyDownTab(e, currentQ.id)}
+                              onChange={(e) => handleAnswerChange(currentQ.id, e.target.value)}
+                              spellCheck="false"
+                              autoCapitalize="off"
+                              autoComplete="off"
+                              autoCorrect="off"
+                              data-gramm="false"
+                              data-enable-grammarly="false"
+                            />
+                          </div>
 
                           {/* Terminal Output */}
                           <div className="bg-[#1E293B] border border-slate-800 rounded-xl p-4 font-mono text-[12px]">
@@ -773,22 +963,89 @@ export default function StudentExamPage({ params }: { params: Promise<{ id: stri
                         </div>
                       )}
 
-                      {qInfo?.type === "Essay" && (
-                        <div>
-                          <textarea
-                            className="w-full resize-y min-h-[260px] p-5 bg-slate-50 border border-slate-200 rounded-xl text-slate-800 placeholder:text-slate-400 focus:outline-none focus:border-[#7C3AED] focus:bg-white text-[14.5px] leading-relaxed transition-all"
-                            placeholder="Type your essay answer here..."
-                            value={answers[currentQ.id]?.text ?? ""}
-                            onChange={(e) => handleAnswerChange(currentQ.id, e.target.value)}
-                          />
-                          <div className="flex items-center justify-between mt-3 text-xs text-slate-400 font-semibold">
-                            <span className="text-slate-400">Minimum ~120 words recommended</span>
-                            <span>
-                              {answers[currentQ.id]?.text?.split(/\s+/).filter(Boolean).length ?? 0} words
-                            </span>
+                      {qInfo?.type === "Essay" && (() => {
+                        const cat = detectQuestionCategory(currentQ);
+                        if (cat === "programming") {
+                          return (
+                            <div>
+                              <div className="flex bg-[#0F172A] border border-slate-800 rounded-xl focus-within:border-[#7C3AED] overflow-hidden min-h-[280px]">
+                                <div className="bg-[#1E293B] text-slate-500 font-mono text-[12.5px] px-3.5 py-5 select-none text-right border-r border-slate-800 leading-relaxed shrink-0">
+                                  {Array.from({ length: Math.max(10, (answers[currentQ.id]?.text ?? "").split("\n").length) }).map((_, i) => (
+                                    <div key={i}>{i + 1}</div>
+                                  ))}
+                                </div>
+                                <textarea
+                                  className="flex-1 w-full font-mono text-[13.5px] p-5 bg-transparent text-slate-100 border-none outline-none focus:ring-0 resize-y min-h-[260px] leading-relaxed overflow-y-auto"
+                                  placeholder="// Write your programming essay/solution here..."
+                                  value={answers[currentQ.id]?.text ?? ""}
+                                  onKeyDown={(e) => handleKeyDownTab(e, currentQ.id)}
+                                  onChange={(e) => handleAnswerChange(currentQ.id, e.target.value)}
+                                  spellCheck="false"
+                                  autoCapitalize="off"
+                                  autoComplete="off"
+                                  autoCorrect="off"
+                                  data-gramm="false"
+                                  data-enable-grammarly="false"
+                                />
+                              </div>
+                              <div className="flex items-center justify-between mt-3 text-xs text-slate-400 font-semibold">
+                                <span className="text-slate-400">Minimum ~120 words recommended</span>
+                                <span>
+                                  {answers[currentQ.id]?.text?.split(/\s+/).filter(Boolean).length ?? 0} words
+                                </span>
+                              </div>
+                            </div>
+                          );
+                        }
+
+                        if (cat === "grammar") {
+                          return (
+                            <div>
+                              <textarea
+                                className="w-full resize-y min-h-[260px] p-5 bg-[#FAF8F5] border border-[#E6E2D8] rounded-xl text-slate-800 placeholder:text-slate-400 focus:outline-none focus:border-[#7C3AED] focus:bg-white text-[15.5px] leading-relaxed transition-all shadow-inner font-serif"
+                                placeholder="Type your essay answer here. Focus on precise sentence structure, vocabulary, and grammar rules..."
+                                value={answers[currentQ.id]?.text ?? ""}
+                                onChange={(e) => handleAnswerChange(currentQ.id, e.target.value)}
+                                spellCheck="false"
+                                autoCapitalize="off"
+                                autoComplete="off"
+                                autoCorrect="off"
+                                data-gramm="false"
+                                data-enable-grammarly="false"
+                              />
+                              <div className="flex items-center justify-between mt-3 text-xs text-slate-400 font-semibold">
+                                <span className="text-slate-400">Minimum ~120 words recommended</span>
+                                <span>
+                                  {answers[currentQ.id]?.text?.split(/\s+/).filter(Boolean).length ?? 0} words
+                                </span>
+                              </div>
+                            </div>
+                          );
+                        }
+
+                        return (
+                          <div>
+                            <textarea
+                              className="w-full resize-y min-h-[260px] p-5 bg-slate-50 border border-slate-200 rounded-xl text-slate-800 placeholder:text-slate-400 focus:outline-none focus:border-[#7C3AED] focus:bg-white text-[14.5px] leading-relaxed transition-all font-sans"
+                              placeholder="Type your essay answer here..."
+                              value={answers[currentQ.id]?.text ?? ""}
+                              onChange={(e) => handleAnswerChange(currentQ.id, e.target.value)}
+                              spellCheck="false"
+                              autoCapitalize="off"
+                              autoComplete="off"
+                              autoCorrect="off"
+                              data-gramm="false"
+                              data-enable-grammarly="false"
+                            />
+                            <div className="flex items-center justify-between mt-3 text-xs text-slate-400 font-semibold">
+                              <span className="text-slate-400">Minimum ~120 words recommended</span>
+                              <span>
+                                {answers[currentQ.id]?.text?.split(/\s+/).filter(Boolean).length ?? 0} words
+                              </span>
+                            </div>
                           </div>
-                        </div>
-                      )}
+                        );
+                      })()}
                     </div>
                   </div>
                 </div>

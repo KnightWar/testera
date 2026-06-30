@@ -33,9 +33,59 @@ export async function POST(req: NextRequest) {
     }
 
     const exam = student.exams;
-
-    // 2. Check exam window (access code only valid during the window)
     const now = new Date();
+
+    // 1. Check for existing session first to support seamless session resumption/recovery
+    const { data: existingSession } = await supabase
+      .from("sessions")
+      .select("*")
+      .eq("student_id", student.id)
+      .eq("exam_id", exam.id)
+      .maybeSingle();
+
+    if (existingSession) {
+      if (existingSession.submitted_at) {
+        return NextResponse.json(
+          { error: "You have already submitted this exam." },
+          { status: 403 }
+        );
+      }
+
+      // Check if session has expired individually
+      const sessionDurationMs = exam.duration_mins * 60 * 1000;
+      const startedAtTime = new Date(existingSession.started_at || existingSession.created_at).getTime();
+      const sessionExpiry = new Date(startedAtTime + sessionDurationMs);
+
+      if (now > sessionExpiry) {
+        return NextResponse.json(
+          { error: "Your exam session has expired." },
+          { status: 403 }
+        );
+      }
+
+      // Check grace recovery window if it is not currently active
+      if (!existingSession.is_active) {
+        const graceExpires = existingSession.grace_expires_at
+          ? new Date(existingSession.grace_expires_at)
+          : null;
+        if (graceExpires && now > graceExpires) {
+          return NextResponse.json(
+            { error: "Session expired. Contact your supervisor." },
+            { status: 403 }
+          );
+        }
+      }
+
+      // Resume existing session
+      await supabase
+        .from("sessions")
+        .update({ is_active: true, last_seen_at: now.toISOString() })
+        .eq("id", existingSession.id);
+
+      return NextResponse.json({ session: { ...existingSession, is_active: true } });
+    }
+
+    // 2. If no existing session, check the general exam start and end window
     if (exam.start_at && now < new Date(exam.start_at)) {
       return NextResponse.json(
         { error: `Exam has not started yet. It opens at ${new Date(exam.start_at).toLocaleString()}` },
@@ -47,45 +97,6 @@ export async function POST(req: NextRequest) {
         { error: "This exam has ended. The access code is no longer valid." },
         { status: 403 }
       );
-    }
-
-    // 4. Check for existing session (one-active-per-student)
-    const { data: existingSession } = await supabase
-      .from("sessions")
-      .select("*")
-      .eq("student_id", student.id)
-      .eq("exam_id", exam.id)
-      .maybeSingle();
-
-    if (existingSession?.submitted_at) {
-      return NextResponse.json(
-        { error: "You have already submitted this exam." },
-        { status: 403 }
-      );
-    }
-
-    // 5. Grace recovery window
-    if (existingSession && !existingSession.is_active) {
-      const graceExpires = existingSession.grace_expires_at
-        ? new Date(existingSession.grace_expires_at)
-        : null;
-      if (graceExpires && now > graceExpires) {
-        return NextResponse.json(
-          { error: "Session expired. Contact your supervisor." },
-          { status: 403 }
-        );
-      }
-      // Resume existing session
-      await supabase
-        .from("sessions")
-        .update({ is_active: true, last_seen_at: now.toISOString() })
-        .eq("id", existingSession.id);
-      return NextResponse.json({ session: existingSession });
-    }
-
-    if (existingSession?.is_active) {
-      // Resume active session
-      return NextResponse.json({ session: existingSession });
     }
 
     // 6. Build question order (shuffle + pool)

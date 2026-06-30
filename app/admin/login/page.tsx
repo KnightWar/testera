@@ -80,7 +80,17 @@ export default function AdminLoginPage() {
       }, 200);
     } catch (err: any) {
       console.error("Biometric login failed:", err);
-      setError(err.message || "Face ID / Touch ID verification failed.");
+      const errMsg = err.message || "";
+      if (
+        err.name === "NotAllowedError" || 
+        errMsg.includes("NotAllowedError") || 
+        errMsg.includes("not registered") || 
+        errMsg.includes("not found")
+      ) {
+        setError("This biometric credential is not registered. Please sign in with your password first and register your Face ID / Touch ID from the dashboard settings.");
+      } else {
+        setError(errMsg || "Face ID / Touch ID verification failed.");
+      }
     } finally {
       setBioLoading(false);
     }
