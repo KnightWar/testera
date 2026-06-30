@@ -286,7 +286,7 @@ export default function StudentExamPage({ params }: { params: Promise<{ id: stri
     setSession(sessionData);
   }, []);
 
-  // Block copy, paste, cut, contextmenu, drag, and drop events to prevent cheating
+  // ── Layer 1: Block copy, paste, cut, contextmenu, drag, drop events ─────────
   useEffect(() => {
     const preventAction = (e: Event) => {
       e.preventDefault();
@@ -307,6 +307,122 @@ export default function StudentExamPage({ params }: { params: Promise<{ id: stri
       document.removeEventListener("dragstart", preventAction);
       document.removeEventListener("drop", preventAction);
     };
+  }, []);
+
+  // ── Layer 2: Block AI assistant keyboard shortcuts ────────────────────────
+  useEffect(() => {
+    const blockAIShortcuts = (e: KeyboardEvent) => {
+      // Grammarly: Alt+G
+      if (e.altKey && e.key === "g") { e.preventDefault(); e.stopPropagation(); return; }
+      // Grammarly: Alt+Shift+G
+      if (e.altKey && e.shiftKey && e.key === "G") { e.preventDefault(); e.stopPropagation(); return; }
+      // Microsoft Copilot / Editor: Ctrl+Shift+Space / Alt+Right
+      if (e.ctrlKey && e.shiftKey && e.code === "Space") { e.preventDefault(); e.stopPropagation(); return; }
+      if (e.altKey && e.code === "ArrowRight") { e.preventDefault(); e.stopPropagation(); return; }
+      // LanguageTool: Ctrl+Shift+L
+      if (e.ctrlKey && e.shiftKey && e.key === "L") { e.preventDefault(); e.stopPropagation(); return; }
+      // Wordtune: Alt+W
+      if (e.altKey && e.key === "w") { e.preventDefault(); e.stopPropagation(); return; }
+      // QuillBot: Ctrl+Q or Alt+Q
+      if ((e.ctrlKey || e.altKey) && e.key === "q") { e.preventDefault(); e.stopPropagation(); return; }
+      // General AI suggestion accept: Tab key only if inside non-code textarea (handled separately for code editor)
+      // Block F12 (DevTools)
+      if (e.key === "F12") { e.preventDefault(); e.stopPropagation(); return; }
+      // Block Ctrl+Shift+I (DevTools)
+      if (e.ctrlKey && e.shiftKey && (e.key === "I" || e.key === "i")) { e.preventDefault(); e.stopPropagation(); return; }
+      // Block Ctrl+Shift+J (DevTools Console)
+      if (e.ctrlKey && e.shiftKey && (e.key === "J" || e.key === "j")) { e.preventDefault(); e.stopPropagation(); return; }
+      // Block Ctrl+U (View Source)
+      if (e.ctrlKey && (e.key === "U" || e.key === "u")) { e.preventDefault(); e.stopPropagation(); return; }
+    };
+
+    document.addEventListener("keydown", blockAIShortcuts, true);
+    return () => {
+      document.removeEventListener("keydown", blockAIShortcuts, true);
+    };
+  }, []);
+
+  // ── Layer 3: MutationObserver to evict AI extension injected DOM elements ──
+  useEffect(() => {
+    // These are known selectors / patterns used by popular AI writing tools
+    const AI_EXTENSION_SELECTORS = [
+      // Grammarly
+      "grammarly-extension",
+      "grammarly-card",
+      "grammarly-popups",
+      "grammarly-ghost",
+      "grammarly-btn",
+      // Microsoft Editor / Copilot
+      "ms-editor-squiggler",
+      "[data-ms-editor-feature]",
+      "ms-writing-assistance",
+      // LanguageTool
+      "lt-toolbar",
+      "[id^='lt-']",
+      // Wordtune
+      "wordtune-extension-root",
+      // QuillBot
+      "quillbot-extension-portal",
+      // TypeAI / Writer / general AI extension containers
+      "[id*='ai-extension']",
+      "[class*='ai-extension']",
+      "[id*='typeai']",
+      "[id*='copilot-extension']",
+      "writingmate-ext",
+      "sider-ai-panel",
+    ];
+
+    const removeAINodes = (root: Element | Document) => {
+      AI_EXTENSION_SELECTORS.forEach((selector) => {
+        try {
+          root.querySelectorAll(selector).forEach((el) => {
+            (el as HTMLElement).style.display = "none";
+            (el as HTMLElement).style.visibility = "hidden";
+            (el as HTMLElement).style.pointerEvents = "none";
+            el.setAttribute("aria-hidden", "true");
+          });
+        } catch (_) {}
+      });
+    };
+
+    // Run once on mount
+    removeAINodes(document);
+
+    const observer = new MutationObserver((mutations) => {
+      for (const mutation of mutations) {
+        mutation.addedNodes.forEach((node) => {
+          if (node.nodeType === 1) {
+            const el = node as Element;
+            // Remove if element itself matches
+            const tag = el.tagName?.toLowerCase() ?? "";
+            if (
+              tag.startsWith("grammarly") ||
+              tag.startsWith("ms-editor") ||
+              tag.startsWith("lt-") ||
+              tag.includes("ai-extension") ||
+              el.id?.toLowerCase().includes("grammarly") ||
+              el.id?.toLowerCase().includes("quillbot") ||
+              el.id?.toLowerCase().includes("wordtune") ||
+              el.id?.toLowerCase().includes("copilot") ||
+              el.id?.toLowerCase().includes("typeai")
+            ) {
+              (el as HTMLElement).style.display = "none";
+              (el as HTMLElement).style.pointerEvents = "none";
+              el.setAttribute("aria-hidden", "true");
+            }
+            // Also sweep children
+            removeAINodes(el);
+          }
+        });
+      }
+    });
+
+    observer.observe(document.body, {
+      childList: true,
+      subtree: true,
+    });
+
+    return () => observer.disconnect();
   }, []);
 
   // Load exam + questions + answers
@@ -846,6 +962,8 @@ export default function StudentExamPage({ params }: { params: Promise<{ id: stri
                                   autoCorrect="off"
                                   data-gramm="false"
                                   data-enable-grammarly="false"
+                                  data-ms-editor="false"
+                                  data-lt-active="false"
                                 />
                               </div>
                               <div className="flex justify-end mt-2 text-xs text-slate-400 font-semibold">
@@ -869,6 +987,8 @@ export default function StudentExamPage({ params }: { params: Promise<{ id: stri
                                 autoCorrect="off"
                                 data-gramm="false"
                                 data-enable-grammarly="false"
+                                data-ms-editor="false"
+                                data-lt-active="false"
                               />
                               <div className="flex justify-end mt-2 text-xs text-slate-400 font-semibold">
                                 {answers[currentQ.id]?.text?.split(/\s+/).filter(Boolean).length ?? 0} words
@@ -890,6 +1010,8 @@ export default function StudentExamPage({ params }: { params: Promise<{ id: stri
                               autoCorrect="off"
                               data-gramm="false"
                               data-enable-grammarly="false"
+                              data-ms-editor="false"
+                              data-lt-active="false"
                             />
                             <div className="flex justify-end mt-2 text-xs text-slate-400 font-semibold">
                               {answers[currentQ.id]?.text?.split(/\s+/).filter(Boolean).length ?? 0} words
@@ -947,6 +1069,8 @@ export default function StudentExamPage({ params }: { params: Promise<{ id: stri
                               autoCorrect="off"
                               data-gramm="false"
                               data-enable-grammarly="false"
+                              data-ms-editor="false"
+                              data-lt-active="false"
                             />
                           </div>
 
@@ -986,6 +1110,8 @@ export default function StudentExamPage({ params }: { params: Promise<{ id: stri
                                   autoCorrect="off"
                                   data-gramm="false"
                                   data-enable-grammarly="false"
+                                  data-ms-editor="false"
+                                  data-lt-active="false"
                                 />
                               </div>
                               <div className="flex items-center justify-between mt-3 text-xs text-slate-400 font-semibold">
@@ -1012,6 +1138,8 @@ export default function StudentExamPage({ params }: { params: Promise<{ id: stri
                                 autoCorrect="off"
                                 data-gramm="false"
                                 data-enable-grammarly="false"
+                                data-ms-editor="false"
+                                data-lt-active="false"
                               />
                               <div className="flex items-center justify-between mt-3 text-xs text-slate-400 font-semibold">
                                 <span className="text-slate-400">Minimum ~120 words recommended</span>
@@ -1036,6 +1164,8 @@ export default function StudentExamPage({ params }: { params: Promise<{ id: stri
                               autoCorrect="off"
                               data-gramm="false"
                               data-enable-grammarly="false"
+                              data-ms-editor="false"
+                              data-lt-active="false"
                             />
                             <div className="flex items-center justify-between mt-3 text-xs text-slate-400 font-semibold">
                               <span className="text-slate-400">Minimum ~120 words recommended</span>
